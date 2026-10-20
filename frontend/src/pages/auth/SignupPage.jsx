@@ -1,4 +1,5 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react'
+// 담당: 최원석 (로그인·회원가입)
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useSignup } from '@/api/auth'
 import { getErrorMessage } from '@/api/client'
@@ -7,18 +8,18 @@ import { AuthShell, FormError } from './AuthShell'
 export function SignupPage() {
   const signup = useSignup()
   const [form, setForm] = useState({ email: '', password: '', passwordConfirm: '', nickname: '' })
-  const [localError, setLocalError] = useState<string | null>(null)
+  const [localError, setLocalError] = useState(null)
 
-  const update = (key: keyof typeof form) => (e: ChangeEvent<HTMLInputElement>) =>
-    setForm((prev) => ({ ...prev, [key]: e.target.value }))
+  const update = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = (e) => {
     e.preventDefault()
     if (form.password !== form.passwordConfirm) {
       setLocalError('비밀번호가 일치하지 않습니다.')
       return
     }
     setLocalError(null)
+    // 성공하면 useSignup이 마이페이지(프로필 입력)로 이동시킨다
     signup.mutate({ email: form.email, password: form.password, nickname: form.nickname })
   }
 

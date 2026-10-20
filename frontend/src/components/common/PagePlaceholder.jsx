@@ -1,15 +1,10 @@
 import { Construction } from 'lucide-react'
 
-interface PagePlaceholderProps {
-  title: string
-  owner: string
-  description: string
-  todos: string[]
-  apis: string[]
-}
-
-/** 담당자가 구현하기 전까지 보여줄 안내 화면. 구현을 시작하면 이 컴포넌트를 지운다. */
-export function PagePlaceholder({ title, owner, description, todos, apis }: PagePlaceholderProps) {
+/**
+ * 담당자가 구현하기 전까지 보여줄 안내 화면. 구현을 시작하면 이 컴포넌트를 지운다.
+ * @param {{ title: string, owner: string, description: string, todos: string[], apis: string[] }} props
+ */
+export function PagePlaceholder({ title, owner, description, todos, apis }) {
   return (
     <section className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 md:p-8">
       <div className="mb-4 flex items-center gap-3">

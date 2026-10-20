@@ -4,7 +4,7 @@ export function FridgePage() {
   return (
     <PagePlaceholder
       title="스마트 냉장고"
-      owner="김수현 (화면) · 유지훈 (API)"
+      owner="김수현 (화면 + API)"
       description="재료별 합계와 기한·보관 위치별 재고 묶음을 관리하고 변경 이력을 남긴다."
       todos={[
         '재료별 합계 목록 + 묶음(lot) 펼쳐보기',

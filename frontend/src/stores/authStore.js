@@ -1,23 +1,17 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Me, TokenResponse } from '@/types/api'
 
-interface AuthState {
-  accessToken: string | null
-  refreshToken: string | null
-  user: Me | null
-  setSession: (tokens: TokenResponse) => void
-  setUser: (user: Me) => void
-  clear: () => void
-}
-
-/** 로그인 세션. localStorage('mealfit-auth')에 저장되어 새로고침해도 유지된다. */
-export const useAuthStore = create<AuthState>()(
+/**
+ * 로그인 세션. localStorage('mealfit-auth')에 저장되어 새로고침해도 유지된다.
+ * user: { id, email, nickname }
+ */
+export const useAuthStore = create(
   persist(
     (set) => ({
       accessToken: null,
       refreshToken: null,
       user: null,
+      /** 백엔드 TokenResponse { accessToken, refreshToken, tokenType, expiresIn, user } 저장 */
       setSession: (tokens) =>
         set({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, user: tokens.user }),
       setUser: (user) => set({ user }),

@@ -2,12 +2,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { queryKeys } from '@/api/queryKeys'
 import { useAuthStore } from '@/stores/authStore'
-import type { Me, Profile, ProfileUpdateRequest } from '@/types/api'
 
+/**
+ * Profile: {
+ *   nickname, goal: 'LOSS'|'MAINTAIN'|'GAIN', cookingTimePref: 10|20|30,
+ *   budgetPerMeal: number|null, allergies: string[], excludedIngredients: string[]
+ * }
+ */
 export const meApi = {
-  getMe: () => api.get<Me>('/me').then((r) => r.data),
-  getProfile: () => api.get<Profile>('/me/profile').then((r) => r.data),
-  updateProfile: (body: ProfileUpdateRequest) => api.put<Profile>('/me/profile', body).then((r) => r.data),
+  getMe: () => api.get('/me').then((r) => r.data),
+  getProfile: () => api.get('/me/profile').then((r) => r.data),
+  updateProfile: (body) => api.put('/me/profile', body).then((r) => r.data),
 }
 
 export function useProfile() {

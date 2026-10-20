@@ -1,8 +1,8 @@
+// 담당: 최원석 (로그인·회원가입)
 import { Sparkles } from 'lucide-react'
-import type { ReactNode } from 'react'
 
 /** 로그인·회원가입 공통 카드 레이아웃 */
-export function AuthShell({ children, footer }: { children: ReactNode; footer: ReactNode }) {
+export function AuthShell({ children, footer }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-emerald-50 to-white px-4 py-10">
       <div className="w-full max-w-md rounded-3xl border border-gray-100 bg-white p-8 shadow-xl shadow-emerald-100/50">
@@ -22,7 +22,7 @@ export function AuthShell({ children, footer }: { children: ReactNode; footer: R
   )
 }
 
-export function FormError({ message }: { message?: string | null }) {
+export function FormError({ message }) {
   if (!message) return null
   return (
     <p role="alert" className="rounded-xl bg-rose-50 px-3.5 py-2.5 text-sm whitespace-pre-line text-rose-700">

@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react'
+// 담당: 최원석 (로그인·회원가입)
+import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useLogin } from '@/api/auth'
 import { getErrorMessage } from '@/api/client'
@@ -10,9 +11,10 @@ export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = (e) => {
     e.preventDefault()
-    const from = (location.state as { from?: string } | null)?.from ?? '/dashboard'
+    // 로그인이 필요해서 튕겨온 경우 원래 가려던 화면으로 돌려보낸다
+    const from = location.state?.from ?? '/dashboard'
     login.mutate({ email, password, redirectTo: from })
   }
 

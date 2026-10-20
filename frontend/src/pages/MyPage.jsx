@@ -1,22 +1,20 @@
+// 담당: 최원석 (마이페이지)
 import { CheckCircle2, LogOut } from 'lucide-react'
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useLogout } from '@/api/auth'
 import { getErrorMessage } from '@/api/client'
 import { useProfile, useUpdateProfile } from '@/api/me'
 import { Spinner } from '@/components/common/Spinner'
 import { TagInput } from '@/components/common/TagInput'
+import { COOKING_TIMES, GOAL } from '@/lib/enums'
 import { GOAL_LABEL } from '@/lib/labels'
 import { useAuthStore } from '@/stores/authStore'
-import type { CookingTime, Goal, Profile } from '@/types/api'
-
-const GOALS: Goal[] = ['LOSS', 'MAINTAIN', 'GAIN']
-const COOKING_TIMES: CookingTime[] = [10, 20, 30]
 
 export function MyPage() {
   const { data: profile, isLoading, isError, error } = useProfile()
   const location = useLocation()
-  const isOnboarding = (location.state as { onboarding?: boolean } | null)?.onboarding === true
+  const isOnboarding = location.state?.onboarding === true
 
   if (isLoading) {
     return (
@@ -42,13 +40,13 @@ export function MyPage() {
   )
 }
 
-function ProfileForm({ initial }: { initial: Profile }) {
-  const [form, setForm] = useState<Profile>(initial)
+function ProfileForm({ initial }) {
+  const [form, setForm] = useState(initial)
   const update = useUpdateProfile()
 
-  const set = <K extends keyof Profile>(key: K, value: Profile[K]) => setForm((prev) => ({ ...prev, [key]: value }))
+  const set = (key, value) => setForm((prev) => ({ ...prev, [key]: value }))
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = (e) => {
     e.preventDefault()
     update.mutate(form)
   }
@@ -77,7 +75,7 @@ function ProfileForm({ initial }: { initial: Profile }) {
       <fieldset>
         <legend className="label">목표</legend>
         <div className="grid grid-cols-3 gap-2">
-          {GOALS.map((goal) => (
+          {Object.values(GOAL).map((goal) => (
             <ChoiceButton key={goal} selected={form.goal === goal} onClick={() => set('goal', goal)}>
               {GOAL_LABEL[goal]}
             </ChoiceButton>
@@ -157,15 +155,7 @@ function ProfileForm({ initial }: { initial: Profile }) {
   )
 }
 
-function ChoiceButton({
-  selected,
-  onClick,
-  children,
-}: {
-  selected: boolean
-  onClick: () => void
-  children: ReactNode
-}) {
+function ChoiceButton({ selected, onClick, children }) {
   return (
     <button
       type="button"

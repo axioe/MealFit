@@ -11,6 +11,7 @@
 | AI 엔진 | OpenAI API | **Gemini API** (Python AI 서비스, `google-genai` SDK + JSON 스키마 응답) |
 | DB | MySQL 또는 PostgreSQL | **MariaDB 11.4** |
 | 디자인 | Figma | 사용 안 함. AI Studio 프로토타입 화면을 기준으로 바로 구현 |
+| 프론트 언어 | React + TypeScript | **React + JavaScript** (`.js` / `.jsx`) |
 | Spring Boot | 3.x | 3.5.16 (Java 21) |
 
 ## 폴더 구조
@@ -30,7 +31,7 @@ MealFit/
 │        ├─ cooking/         조리 완료·취소 복원              엔티티/리포지토리만
 │        ├─ intake/          섭취 기록                        엔티티/리포지토리만
 │        └─ ai/              Python AI 서비스 호출용 RestClient 설정
-├─ frontend/                 React + TypeScript + Vite
+├─ frontend/                 React + JavaScript + Vite
 │  └─ src/
 │     ├─ api/                axios 클라이언트(토큰 자동 갱신), 도메인별 API + TanStack Query 훅
 │     ├─ stores/             Zustand (로그인 세션)
@@ -38,7 +39,7 @@ MealFit/
 │     ├─ components/common/  상태 배지, 태그 입력, 스피너, 작업 안내 화면
 │     ├─ pages/              화면 (로그인·회원가입·마이페이지 ✅ / 나머지는 담당자 안내 화면)
 │     ├─ routes/             라우터, 로그인 가드
-│     └─ types/              백엔드 DTO·enum과 맞춘 타입
+│     └─ lib/                백엔드 enum 상수(enums.js), 한글 라벨(labels.js)
 ├─ docker-compose.yml        로컬 MariaDB
 └─ .env.example
 ```
@@ -66,12 +67,14 @@ cd frontend && npm install && npm run dev   # http://localhost:5173
 
 | 담당 | 백엔드 | 프론트엔드 |
 |---|---|---|
-| 김영현 (PL) | `global/*`, `domain/auth`, `domain/user`, 배포, 리뷰 | 공통 구조 |
+| 김영현 (PL) | `global/*` (보안·예외·설정), 배포, 리뷰 | 공통 구조 (`api/client.js`, `routes`, `components/layout`) |
 | 백가연 (PM) | API 명세(Swagger) 관리, QA 시나리오 | |
-| 김수현 | | `pages/Recommend·Fridge·Shopping·RecipeDetail`, `components/common` |
+| 김수현 | **스마트 냉장고** `domain/inventory` | **스마트 냉장고** `pages/FridgePage`, `pages/Recommend·Shopping·RecipeDetail` 화면, `components/common` |
 | 박희진 | `ai-service/` (FastAPI + Gemini), `domain/ai` 연동 | |
-| 유지훈 | `domain/inventory·shopping·cooking·recipe·mealplan` 서비스/컨트롤러, 서버 검증 | |
-| 최원석 | `domain/intake`, 대시보드 API | `pages/DashboardPage`, (Phase 1) 캘린더·체중 차트 |
+| 유지훈 | **운동** (Phase 1) `domain/workout`, `domain/shopping·cooking·recipe·mealplan` 서비스/컨트롤러, 서버 검증 | **운동** `pages/WorkoutPage` |
+| 최원석 | **로그인·회원가입·마이페이지** `domain/auth`, `domain/user`, `domain/intake`, 대시보드 API | **로그인·회원가입·마이페이지** `pages/auth/*`, `pages/MyPage`, `pages/DashboardPage`, (Phase 1) 캘린더·체중 차트 |
+
+> 로그인·회원가입·마이페이지는 기본 기능이 이미 동작합니다. 최원석 님은 이 코드를 이어받아 다듬으면 됩니다.
 
 각 페이지의 안내 화면(`PagePlaceholder`)에 구현할 것과 연동 API가 적혀 있다. 구현을 시작하면 안내 화면을 지우고 만든다.
 
@@ -127,12 +130,14 @@ cd frontend && npm install && npm run dev   # http://localhost:5173
 - 계산 정책: 실제 필요량 = 재료량 × 실제 인분 / 기준 인분 · kg↔g, L↔ml 자동 환산 · 개/팩/마리는 서로 합산 금지 · 부족분 = 필요량 + 최소 유지량 − 현재고
 
 ### 프론트엔드
-- API 호출은 `src/api/client.ts`의 `api` 인스턴스만 사용 (토큰 첨부, 401 시 자동 갱신)
-- 도메인별로 `src/api/{domain}.ts`에 API 함수 + `useQuery`/`useMutation` 훅을 만든다 (`src/api/me.ts` 참고)
-- 쿼리 키는 `src/api/queryKeys.ts`에 모으고, 변경 후 관련 키를 `invalidateQueries`
+- API 호출은 `src/api/client.js`의 `api` 인스턴스만 사용 (토큰 첨부, 401 시 자동 갱신)
+- 파일 확장자: 화면(JSX가 있는 파일)은 `.jsx`, 그 외는 `.js`
+- 도메인별로 `src/api/{domain}.js`에 API 함수 + `useQuery`/`useMutation` 훅을 만든다 (`src/api/me.js` 참고)
+- 쿼리 키는 `src/api/queryKeys.js`에 모으고, 변경 후 관련 키를 `invalidateQueries`
 - 에러 메시지는 `getErrorMessage(error)`로 서버 메시지를 그대로 보여준다
 - 공통 스타일 클래스: `input`, `label`, `btn-primary`, `btn-secondary`, `card` (`src/index.css`)
-- 백엔드 enum 값은 `src/types/domain.ts`, 한글 라벨은 `src/lib/labels.ts`
+- 백엔드 enum 값은 문자열을 직접 쓰지 말고 `src/lib/enums.js` 상수 사용 (예: `MEAL_PLAN_STATUS.CONFIRMED`), 한글 라벨은 `src/lib/labels.js`
+- import 경로는 `@/`(= `src/`)로 시작한다 (예: `import { api } from '@/api/client'`)
 
 ### AI 서비스 연동 (Spring ↔ Python)
 - Gemini API 키는 Python 서비스 환경 변수에만 둔다. 브라우저·Spring에는 노출 금지

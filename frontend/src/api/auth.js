@@ -2,32 +2,38 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/authStore'
-import type { LoginRequest, SignupRequest, TokenResponse } from '@/types/api'
 
+/**
+ * 응답 TokenResponse: { accessToken, refreshToken, tokenType, expiresIn, user: { id, email, nickname } }
+ */
 export const authApi = {
-  signup: (body: SignupRequest) => api.post<TokenResponse>('/auth/signup', body).then((r) => r.data),
-  login: (body: LoginRequest) => api.post<TokenResponse>('/auth/login', body).then((r) => r.data),
-  logout: (refreshToken: string) => api.post<void>('/auth/logout', { refreshToken }),
+  /** @param {{ email: string, password: string, nickname: string }} body */
+  signup: (body) => api.post('/auth/signup', body).then((r) => r.data),
+  /** @param {{ email: string, password: string }} body */
+  login: (body) => api.post('/auth/login', body).then((r) => r.data),
+  logout: (refreshToken) => api.post('/auth/logout', { refreshToken }),
 }
 
 /** 로그인/가입 성공 처리: 세션 저장 후 지정한 화면으로 이동 */
 function useStartSession() {
   const setSession = useAuthStore((s) => s.setSession)
   const navigate = useNavigate()
-  return (tokens: TokenResponse, to: string, state?: unknown) => {
+  return (tokens, to, state) => {
     setSession(tokens)
     navigate(to, { replace: true, state })
   }
 }
 
+/** mutate({ email, password, redirectTo }) */
 export function useLogin() {
   const startSession = useStartSession()
   return useMutation({
-    mutationFn: ({ email, password }: LoginRequest & { redirectTo: string }) => authApi.login({ email, password }),
+    mutationFn: ({ email, password }) => authApi.login({ email, password }),
     onSuccess: (tokens, { redirectTo }) => startSession(tokens, redirectTo),
   })
 }
 
+/** mutate({ email, password, nickname }) */
 export function useSignup() {
   const startSession = useStartSession()
   return useMutation({

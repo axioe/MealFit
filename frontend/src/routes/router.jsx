@@ -8,6 +8,7 @@ import { MyPage } from '@/pages/MyPage'
 import { RecipeDetailPage } from '@/pages/RecipeDetailPage'
 import { RecommendPage } from '@/pages/RecommendPage'
 import { ShoppingPage } from '@/pages/ShoppingPage'
+import { WorkoutPage } from '@/pages/WorkoutPage'
 import { ProtectedRoute, PublicOnlyRoute } from './guards'
 
 export const router = createBrowserRouter([
@@ -30,6 +31,7 @@ export const router = createBrowserRouter([
           { path: '/recipes/:id', element: <RecipeDetailPage /> },
           { path: '/fridge', element: <FridgePage /> },
           { path: '/shopping', element: <ShoppingPage /> },
+          { path: '/workout', element: <WorkoutPage /> },
           { path: '/mypage', element: <MyPage /> },
         ],
       },

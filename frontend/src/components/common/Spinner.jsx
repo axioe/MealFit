@@ -1,4 +1,4 @@
-export function Spinner({ className = 'h-10 w-10' }: { className?: string }) {
+export function Spinner({ className = 'h-10 w-10' }) {
   return (
     <div
       role="status"

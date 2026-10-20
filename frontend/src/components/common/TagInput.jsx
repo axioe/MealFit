@@ -1,15 +1,11 @@
 import { X } from 'lucide-react'
-import { useState, type KeyboardEvent } from 'react'
+import { useState } from 'react'
 
-interface TagInputProps {
-  id: string
-  value: string[]
-  onChange: (next: string[]) => void
-  placeholder?: string
-}
-
-/** 엔터 또는 쉼표로 항목 추가, X로 삭제 (알레르기·제외 재료 입력용) */
-export function TagInput({ id, value, onChange, placeholder }: TagInputProps) {
+/**
+ * 엔터 또는 쉼표로 항목 추가, X로 삭제 (알레르기·제외 재료 입력용)
+ * @param {{ id: string, value: string[], onChange: (next: string[]) => void, placeholder?: string }} props
+ */
+export function TagInput({ id, value, onChange, placeholder }) {
   const [draft, setDraft] = useState('')
 
   const commit = () => {
@@ -18,7 +14,7 @@ export function TagInput({ id, value, onChange, placeholder }: TagInputProps) {
     setDraft('')
   }
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e) => {
     if (e.nativeEvent.isComposing) return // 한글 조합 중 Enter 무시
     if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault()

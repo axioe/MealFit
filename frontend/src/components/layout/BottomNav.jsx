@@ -5,7 +5,7 @@ export function BottomNav() {
   return (
     <nav className="fixed right-0 bottom-0 left-0 z-40 border-t border-gray-200 bg-white/95 px-2 py-1 pb-[env(safe-area-inset-bottom)] shadow-lg backdrop-blur-md md:hidden">
       <div className="mx-auto flex max-w-lg items-center justify-around">
-        {NAV_ITEMS.map(({ to, shortLabel, icon: Icon }) => (
+        {NAV_ITEMS.filter((item) => item.mobile !== false).map(({ to, shortLabel, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
