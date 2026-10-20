@@ -1,11 +1,5 @@
 // 백엔드 enum 값 → 화면에 보여줄 한글
 
-export const GOAL_LABEL = {
-  LOSS: '체중 감량',
-  MAINTAIN: '체중 유지',
-  GAIN: '체중 증량',
-}
-
 export const MEAL_TYPE_LABEL = {
   BREAKFAST: '아침',
   LUNCH: '점심',

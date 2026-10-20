@@ -1,60 +1,9 @@
 -- MealFit Phase 0 초기 스키마
 -- 규칙: 이미 머지된 마이그레이션 파일은 수정하지 않는다. 변경은 V2__설명.sql 처럼 새 파일로 추가한다.
 -- 수량 컬럼은 DECIMAL(12,3) (Java BigDecimal), enum 컬럼은 VARCHAR + @Enumerated(STRING)
-
--- ============================================================
--- 사용자
--- ============================================================
-CREATE TABLE users (
-    id            BIGINT       NOT NULL AUTO_INCREMENT,
-    email         VARCHAR(255) NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    created_at    DATETIME(6)  NOT NULL,
-    updated_at    DATETIME(6)  NOT NULL,
-    PRIMARY KEY (id),
-    CONSTRAINT uk_users_email UNIQUE (email)
-);
-
-CREATE TABLE profiles (
-    id                BIGINT      NOT NULL AUTO_INCREMENT,
-    user_id           BIGINT      NOT NULL,
-    nickname          VARCHAR(50) NOT NULL,
-    goal              VARCHAR(20) NOT NULL,
-    cooking_time_pref INT         NOT NULL,
-    budget_per_meal   INT         NULL,
-    created_at        DATETIME(6) NOT NULL,
-    updated_at        DATETIME(6) NOT NULL,
-    PRIMARY KEY (id),
-    CONSTRAINT uk_profiles_user UNIQUE (user_id),
-    CONSTRAINT fk_profiles_user FOREIGN KEY (user_id) REFERENCES users (id)
-);
-
-CREATE TABLE profile_allergies (
-    profile_id BIGINT       NOT NULL,
-    allergy    VARCHAR(100) NOT NULL,
-    PRIMARY KEY (profile_id, allergy),
-    CONSTRAINT fk_profile_allergies_profile FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE
-);
-
-CREATE TABLE profile_excluded_ingredients (
-    profile_id      BIGINT       NOT NULL,
-    ingredient_name VARCHAR(100) NOT NULL,
-    PRIMARY KEY (profile_id, ingredient_name),
-    CONSTRAINT fk_profile_excluded_profile FOREIGN KEY (profile_id) REFERENCES profiles (id) ON DELETE CASCADE
-);
-
-CREATE TABLE refresh_tokens (
-    id         BIGINT      NOT NULL AUTO_INCREMENT,
-    user_id    BIGINT      NOT NULL,
-    token_hash CHAR(64)    NOT NULL,
-    expires_at DATETIME(6) NOT NULL,
-    revoked    BOOLEAN     NOT NULL DEFAULT FALSE,
-    created_at DATETIME(6) NOT NULL,
-    updated_at DATETIME(6) NOT NULL,
-    PRIMARY KEY (id),
-    CONSTRAINT uk_refresh_tokens_hash UNIQUE (token_hash),
-    CONSTRAINT fk_refresh_tokens_user FOREIGN KEY (user_id) REFERENCES users (id)
-);
+--
+-- 사용자·프로필·인증 테이블(users 등)은 로그인 담당자가 새 마이그레이션으로 추가한다.
+-- 그때 아래 테이블의 user_id에 users(id) 외래키를 함께 건다.
 
 -- ============================================================
 -- 레시피
@@ -74,8 +23,7 @@ CREATE TABLE recipes (
     source              VARCHAR(20)   NOT NULL, -- AI_GENERATED / LOCAL_FALLBACK / SEED
     created_at          DATETIME(6)   NOT NULL,
     updated_at          DATETIME(6)   NOT NULL,
-    PRIMARY KEY (id),
-    CONSTRAINT fk_recipes_user FOREIGN KEY (user_id) REFERENCES users (id)
+    PRIMARY KEY (id)
 );
 
 CREATE TABLE recipe_steps (
@@ -112,8 +60,7 @@ CREATE TABLE inventory_lots (
     memo             VARCHAR(255)   NULL,
     created_at       DATETIME(6)    NOT NULL,
     updated_at       DATETIME(6)    NOT NULL,
-    PRIMARY KEY (id),
-    CONSTRAINT fk_inventory_lots_user FOREIGN KEY (user_id) REFERENCES users (id)
+    PRIMARY KEY (id)
 );
 CREATE INDEX idx_inventory_lots_user_ingredient ON inventory_lots (user_id, ingredient_name);
 
@@ -127,8 +74,7 @@ CREATE TABLE shopping_items (
     status          VARCHAR(20)    NOT NULL, -- NEEDED / PARTIAL / PURCHASED
     created_at      DATETIME(6)    NOT NULL,
     updated_at      DATETIME(6)    NOT NULL,
-    PRIMARY KEY (id),
-    CONSTRAINT fk_shopping_items_user FOREIGN KEY (user_id) REFERENCES users (id)
+    PRIMARY KEY (id)
 );
 CREATE INDEX idx_shopping_items_user_status ON shopping_items (user_id, status);
 
@@ -147,7 +93,6 @@ CREATE TABLE meal_plans (
     created_at            DATETIME(6)  NOT NULL,
     updated_at            DATETIME(6)  NOT NULL,
     PRIMARY KEY (id),
-    CONSTRAINT fk_meal_plans_user FOREIGN KEY (user_id) REFERENCES users (id),
     CONSTRAINT fk_meal_plans_recipe FOREIGN KEY (recipe_id) REFERENCES recipes (id)
 );
 CREATE INDEX idx_meal_plans_user_date ON meal_plans (user_id, plan_date);
@@ -164,7 +109,6 @@ CREATE TABLE cooking_events (
     created_at   DATETIME(6) NOT NULL,
     updated_at   DATETIME(6) NOT NULL,
     PRIMARY KEY (id),
-    CONSTRAINT fk_cooking_events_user FOREIGN KEY (user_id) REFERENCES users (id),
     CONSTRAINT fk_cooking_events_recipe FOREIGN KEY (recipe_id) REFERENCES recipes (id),
     CONSTRAINT fk_cooking_events_meal_plan FOREIGN KEY (meal_plan_id) REFERENCES meal_plans (id)
 );
@@ -180,7 +124,6 @@ CREATE TABLE inventory_transactions (
     created_at       DATETIME(6)    NOT NULL,
     updated_at       DATETIME(6)    NOT NULL,
     PRIMARY KEY (id),
-    CONSTRAINT fk_inventory_tx_user FOREIGN KEY (user_id) REFERENCES users (id),
     CONSTRAINT fk_inventory_tx_lot FOREIGN KEY (lot_id) REFERENCES inventory_lots (id),
     CONSTRAINT fk_inventory_tx_cooking_event FOREIGN KEY (cooking_event_id) REFERENCES cooking_events (id)
 );
@@ -195,7 +138,6 @@ CREATE TABLE intake_logs (
     created_at    DATETIME(6) NOT NULL,
     updated_at    DATETIME(6) NOT NULL,
     PRIMARY KEY (id),
-    CONSTRAINT fk_intake_logs_user FOREIGN KEY (user_id) REFERENCES users (id),
     CONSTRAINT fk_intake_logs_meal_plan FOREIGN KEY (meal_plan_id) REFERENCES meal_plans (id)
 );
 CREATE INDEX idx_intake_logs_meal_plan ON intake_logs (meal_plan_id);

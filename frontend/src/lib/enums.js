@@ -1,9 +1,6 @@
 // 백엔드 enum과 같은 값을 쓴다 (backend: domain/**/*Status.java 등).
 // 문자열을 직접 쓰지 말고 MEAL_PLAN_STATUS.CONFIRMED 처럼 이 상수를 쓴다 (오타 방지).
 
-export const GOAL = Object.freeze({ LOSS: 'LOSS', MAINTAIN: 'MAINTAIN', GAIN: 'GAIN' })
-export const COOKING_TIMES = Object.freeze([10, 20, 30])
-
 export const STORAGE_LOCATION = Object.freeze({ FRIDGE: 'FRIDGE', FREEZER: 'FREEZER', PANTRY: 'PANTRY' })
 export const LOT_STATUS = Object.freeze({ ACTIVE: 'ACTIVE', DEPLETED: 'DEPLETED', DISPOSED: 'DISPOSED' })
 export const EXPIRATION_STATUS = Object.freeze({

@@ -20,10 +20,8 @@
 MealFit/
 ├─ backend/                  Spring Boot (REST API, 도메인 로직, 서버 검증)
 │  └─ src/main/java/com/mealfit/
-│     ├─ global/             공통: security(JWT), exception, config, common(BaseTimeEntity, StatusTransition)
+│     ├─ global/             공통: exception, config, common(BaseTimeEntity, StatusTransition), web(@CurrentUserId)
 │     └─ domain/
-│        ├─ auth/            회원가입·로그인·토큰 갱신        ✅ 구현됨
-│        ├─ user/            내 정보·프로필                   ✅ 구현됨
 │        ├─ inventory/       재고 묶음·변경 이력              엔티티/리포지토리만
 │        ├─ shopping/        장보기 부족분                    엔티티/리포지토리만
 │        ├─ recipe/          레시피·재료·조리 순서            엔티티/리포지토리만
@@ -31,14 +29,14 @@ MealFit/
 │        ├─ cooking/         조리 완료·취소 복원              엔티티/리포지토리만
 │        ├─ intake/          섭취 기록                        엔티티/리포지토리만
 │        └─ ai/              Python AI 서비스 호출용 RestClient 설정
+│        (auth/, user/       로그인·회원가입·프로필 — 최원석 담당, 아직 없음)
 ├─ frontend/                 React + JavaScript + Vite
 │  └─ src/
-│     ├─ api/                axios 클라이언트(토큰 자동 갱신), 도메인별 API + TanStack Query 훅
-│     ├─ stores/             Zustand (로그인 세션)
+│     ├─ api/                axios 클라이언트, 도메인별 API + TanStack Query 훅
 │     ├─ components/layout/  좌측 메뉴(데스크톱) / 하단 메뉴(모바일) / 헤더
 │     ├─ components/common/  상태 배지, 태그 입력, 스피너, 작업 안내 화면
-│     ├─ pages/              화면 (로그인·회원가입·마이페이지 ✅ / 나머지는 담당자 안내 화면)
-│     ├─ routes/             라우터, 로그인 가드
+│     ├─ pages/              화면 (모두 담당자 안내 화면 상태)
+│     ├─ routes/             라우터
 │     └─ lib/                백엔드 enum 상수(enums.js), 한글 라벨(labels.js)
 ├─ docker-compose.yml        로컬 MariaDB
 └─ .env.example
@@ -59,7 +57,8 @@ cd frontend && npm install && npm run dev   # http://localhost:5173
 
 - 3306 포트를 이미 쓰고 있으면(로컬 MySQL 등) `.env`에서 `DB_PORT=3307`로 바꾼다. Spring도 루트 `.env`를 읽는다.
 - 테이블은 Spring 실행 시 Flyway가 자동으로 만든다.
-- **Swagger:** http://localhost:8080/swagger-ui.html (로그인 응답의 `accessToken`을 Authorize에 넣으면 인증 API도 호출 가능)
+- **Swagger:** http://localhost:8080/swagger-ui.html
+- 로그인 기능 완성 전까지 API는 로그인 없이 호출된다. 사용자는 `X-User-Id` 헤더로 지정하고, 없으면 1번 사용자로 처리한다.
 - 프론트는 `/api` 요청을 Vite 프록시로 8080에 넘기므로 CORS 설정이 필요 없다.
 - 테스트: `cd backend && ./gradlew test` (H2 메모리 DB) / `cd frontend && npm run build`
 
@@ -67,14 +66,14 @@ cd frontend && npm install && npm run dev   # http://localhost:5173
 
 | 담당 | 백엔드 | 프론트엔드 |
 |---|---|---|
-| 김영현 (PL) | `global/*` (보안·예외·설정), 배포, 리뷰 | 공통 구조 (`api/client.js`, `routes`, `components/layout`) |
+| 김영현 (PL) | `global/*` (예외·설정), 배포, 리뷰 | 공통 구조 (`api/client.js`, `routes`, `components/layout`) |
 | 백가연 (PM) | API 명세(Swagger) 관리, QA 시나리오 | |
 | 김수현 | **스마트 냉장고** `domain/inventory` | **스마트 냉장고** `pages/FridgePage`, `pages/Recommend·Shopping·RecipeDetail` 화면, `components/common` |
 | 박희진 | `ai-service/` (FastAPI + Gemini), `domain/ai` 연동 | |
 | 유지훈 | **운동** (Phase 1) `domain/workout`, `domain/shopping·cooking·recipe·mealplan` 서비스/컨트롤러, 서버 검증 | **운동** `pages/WorkoutPage` |
-| 최원석 | **로그인·회원가입·마이페이지** `domain/auth`, `domain/user`, `domain/intake`, 대시보드 API | **로그인·회원가입·마이페이지** `pages/auth/*`, `pages/MyPage`, `pages/DashboardPage`, (Phase 1) 캘린더·체중 차트 |
+| 최원석 | **로그인·회원가입·마이페이지** 사용자·프로필 테이블, 인증(보안 설정 포함), `domain/intake`, 대시보드 API | **로그인·회원가입·마이페이지** `pages/LoginPage`, `pages/MyPage`, `pages/DashboardPage`, (Phase 1) 캘린더·체중 차트 |
 
-> 로그인·회원가입·마이페이지는 기본 기능이 이미 동작합니다. 최원석 님은 이 코드를 이어받아 다듬으면 됩니다.
+> 로그인 담당자가 할 연결 작업: 사용자 테이블을 새 마이그레이션으로 추가하면서 기존 테이블 `user_id`에 외래키 연결, `global/web/CurrentUserIdArgumentResolver`를 인증 정보 기반으로 교체, 프론트 `api/client.js`에 토큰 처리 추가, 라우터에 로그인 가드 추가.
 
 각 페이지의 안내 화면(`PagePlaceholder`)에 구현할 것과 연동 API가 적혀 있다. 구현을 시작하면 안내 화면을 지우고 만든다.
 
@@ -84,12 +83,8 @@ cd frontend && npm install && npm run dev   # http://localhost:5173
 
 | 상태 | Method | Endpoint | 설명 |
 |---|---|---|---|
-| ✅ | POST | `/api/v1/auth/signup` | 회원가입 (기본 프로필 생성 + 토큰 발급) |
-| ✅ | POST | `/api/v1/auth/login` | 로그인 |
-| ✅ | POST | `/api/v1/auth/refresh` | 토큰 갱신 (Refresh 토큰 1회용, 새 토큰으로 교체) |
-| ✅ | POST | `/api/v1/auth/logout` | Refresh 토큰 폐기 |
-| ✅ | GET | `/api/v1/me` | 내 계정 정보 |
-| ✅ | GET/PUT | `/api/v1/me/profile` | 목표·알레르기·조리 시간(10/20/30)·예산·제외 재료 |
+| | POST | `/api/v1/auth/signup`, `/login` | 회원가입, 로그인 |
+| | GET/PUT | `/api/v1/me/profile` | 목표·알레르기·조리 시간(10/20/30)·예산·제외 재료 |
 | | GET | `/api/v1/dashboard?date=` | 오늘의 식단, 기한 임박 재료, 부족분 |
 | | GET/POST | `/api/v1/inventory/lots` | 재고 묶음 조회(재료별 합계), 입고 |
 | | PATCH | `/api/v1/inventory/lots/{id}` | 수동 조정, 폐기 (이력 자동 기록) |
@@ -119,20 +114,20 @@ cd frontend && npm install && npm run dev   # http://localhost:5173
 - 수량은 `DECIMAL(12,3)` + `BigDecimal`, enum은 `VARCHAR(20)` + `@Enumerated(EnumType.STRING)`
 
 ### 백엔드
-- 로그인한 사용자: 컨트롤러에서 `@AuthenticationPrincipal AuthUser authUser` → `authUser.id()`
-- 다른 사용자 데이터 접근 방지: 조회는 `findByIdAndUserId(id, authUser.id())` 형태로
+- 현재 사용자: 컨트롤러 파라미터에 `@CurrentUserId Long userId` (로그인 완성 후에도 이 코드는 그대로 둔다)
+- 다른 사용자 데이터 접근 방지: 조회는 `findByIdAndUserId(id, userId)` 형태로
 - 에러: `throw new BusinessException(ErrorCode.XXX)` → 자동으로 아래 형식 응답. 새 에러는 `ErrorCode`에 도메인 접두어로 추가 (`INVENTORY_001`)
   ```json
-  { "status": 409, "code": "AUTH_001", "message": "이미 가입된 이메일입니다.", "errors": [], "timestamp": "..." }
+  { "status": 404, "code": "INVENTORY_001", "message": "재고를 찾을 수 없습니다.", "errors": [], "timestamp": "..." }
   ```
 - 상태 변경은 엔티티 메서드에서 `status.validateTransition(next)`로 허용된 전이만 통과 (`MealPlanStatus`, `CookingStatus`, `IntakeStatus`)
 - 재고 수량 변경은 `InventoryTransaction` 이력 저장과 같은 `@Transactional` 안에서
 - 계산 정책: 실제 필요량 = 재료량 × 실제 인분 / 기준 인분 · kg↔g, L↔ml 자동 환산 · 개/팩/마리는 서로 합산 금지 · 부족분 = 필요량 + 최소 유지량 − 현재고
 
 ### 프론트엔드
-- API 호출은 `src/api/client.js`의 `api` 인스턴스만 사용 (토큰 첨부, 401 시 자동 갱신)
+- API 호출은 `src/api/client.js`의 `api` 인스턴스만 사용 (나중에 토큰 처리가 여기 한 곳에 들어간다)
 - 파일 확장자: 화면(JSX가 있는 파일)은 `.jsx`, 그 외는 `.js`
-- 도메인별로 `src/api/{domain}.js`에 API 함수 + `useQuery`/`useMutation` 훅을 만든다 (`src/api/me.js` 참고)
+- 도메인별로 `src/api/{domain}.js`에 API 함수 + `useQuery`/`useMutation` 훅을 만든다
 - 쿼리 키는 `src/api/queryKeys.js`에 모으고, 변경 후 관련 키를 `invalidateQueries`
 - 에러 메시지는 `getErrorMessage(error)`로 서버 메시지를 그대로 보여준다
 - 공통 스타일 클래스: `input`, `label`, `btn-primary`, `btn-secondary`, `card` (`src/index.css`)
