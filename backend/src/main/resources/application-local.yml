@@ -1,0 +1,11 @@
+spring:
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+logging:
+  level:
+    com.mealfit: DEBUG
+    org.hibernate.SQL: DEBUG

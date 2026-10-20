@@ -1,0 +1,28 @@
+# 로컬 개발용 MariaDB. 실행: docker compose up -d
+# 포트가 겹치면(로컬 MySQL 등) .env에 DB_PORT=3307 처럼 바꾸고, Spring 실행 시에도 같은 DB_PORT를 준다.
+services:
+  mariadb:
+    image: mariadb:11.4
+    container_name: mealfit-mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+      MARIADB_DATABASE: ${DB_NAME:-mealfit}
+      MARIADB_USER: ${DB_USERNAME:-mealfit}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-mealfit}
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - mealfit-db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mealfit-db:
