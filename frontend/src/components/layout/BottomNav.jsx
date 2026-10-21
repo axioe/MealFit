@@ -1,25 +1,18 @@
-import { NavLink } from 'react-router-dom'
-import { NAV_ITEMS } from './navItems'
-
+import { NAV_ITEMS } from '@/components/layout/navItems';
+import React from 'react';
+import { NavLink } from 'react-router-dom';
 export function BottomNav() {
-  return (
-    <nav className="fixed right-0 bottom-0 left-0 z-40 border-t border-gray-200 bg-white/95 px-2 py-1 pb-[env(safe-area-inset-bottom)] shadow-lg backdrop-blur-md md:hidden">
-      <div className="mx-auto flex max-w-lg items-center justify-around">
-        {NAV_ITEMS.filter((item) => item.mobile !== false).map(({ to, shortLabel, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) =>
-              `flex min-h-12 min-w-14 flex-col items-center justify-center rounded-xl px-2 py-1 transition-colors ${
-                isActive ? 'font-bold text-emerald-600' : 'font-medium text-gray-500 hover:text-gray-900'
-              }`
-            }
-          >
-            <Icon className="mb-0.5 h-5 w-5" />
-            <span className="text-[11px] leading-tight">{shortLabel}</span>
-          </NavLink>
-        ))}
+    return (<nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 z-40 px-2 py-1 safe-area-pb shadow-lg">
+      <div className="flex items-center justify-around max-w-lg mx-auto">
+        {NAV_ITEMS.filter(item => item.mobile !== false).map(item => {
+            const Icon = item.icon;
+            return (<NavLink key={item.to} to={item.to} className={({ isActive }) => `flex flex-col items-center justify-center min-w-[56px] min-h-[48px] px-2 py-1 rounded-xl text-xs transition-colors cursor-pointer ${isActive
+                    ? 'text-emerald-600 font-bold'
+                    : 'text-gray-500 hover:text-gray-900 font-medium'}`}>
+              <Icon className="w-5 h-5 mb-0.5"/>
+              <span className="text-[11px] leading-tight">{item.shortLabel || item.label}</span>
+            </NavLink>);
+        })}
       </div>
-    </nav>
-  )
+    </nav>);
 }

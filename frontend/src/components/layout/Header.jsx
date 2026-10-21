@@ -49,6 +49,5 @@ export function Header() {
           <span className="sm:hidden">AI 추천</span>
         </Link>
       </div>
-    </header>
-  )
+    </header>);
 }
