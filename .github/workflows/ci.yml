@@ -2,12 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
   workflow_dispatch:
 
-# PR에 새로 push하면 이전 실행은 취소한다. main/develop push는 배포 도중 끊기지 않게 순서대로 실행
+# PR에 새로 push하면 이전 실행은 취소한다. main push는 배포 도중 끊기지 않게 순서대로 실행
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
