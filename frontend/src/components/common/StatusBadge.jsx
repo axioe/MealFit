@@ -14,10 +14,11 @@ const EXPIRATION_STYLE = {
  * 재고 기한 상태 5단계 배지
  * @param {{ status: 'NORMAL'|'IMMINENT'|'TODAY'|'EXPIRED'|'UNKNOWN', date?: string }} props
  */
-export function ExpirationBadge({ status, date }) {
+export function ExpirationBadge({ status, date, className = '' }) {
+  status = String(status ?? 'UNKNOWN').toUpperCase()
   const style = EXPIRATION_STYLE[status] ?? EXPIRATION_STYLE.UNKNOWN
   return (
-    <span className={`${base} ${style.badge}`}>
+    <span className={`${base} ${style.badge} ${className}`}>
       {style.dot && <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />}
       {EXPIRATION_LABEL[status]}
       {date && status !== 'TODAY' ? ` (${date})` : ''}
@@ -33,7 +34,8 @@ const MEAL_PLAN_STYLE = {
 
 /** @param {{ status: 'DRAFT'|'CONFIRMED'|'CANCELED' }} props */
 export function MealPlanStatusBadge({ status }) {
-  return <span className={`${base} ${MEAL_PLAN_STYLE[status]}`}>{MEAL_PLAN_STATUS_LABEL[status]}</span>
+  status = String(status ?? 'DRAFT').toUpperCase()
+  return <span className={`${base} ${MEAL_PLAN_STYLE[status] ?? MEAL_PLAN_STYLE.DRAFT}`}>{MEAL_PLAN_STATUS_LABEL[status]}</span>
 }
 
 const SOURCE_STYLE = {
@@ -47,6 +49,23 @@ const SOURCE_STYLE = {
  * @param {{ source: 'AI_GENERATED'|'LOCAL_FALLBACK'|'SEED' }} props
  */
 export function RecipeSourceBadge({ source }) {
-  const { label, className } = SOURCE_STYLE[source]
+  const { label, className } = SOURCE_STYLE[String(source ?? 'SEED').toUpperCase()] ?? SOURCE_STYLE.SEED
   return <span className={`${base} ${className}`}>{label}</span>
+}
+
+
+/** Display adapter for the imported design. Retains the team's existing badge exports. */
+export function MealStatusBadge({ status, intakeStatus }) {
+  const meal = String(status ?? '').toUpperCase()
+  const intake = String(intakeStatus ?? '').toUpperCase()
+  if (meal === 'COOKING_DONE' || meal === 'COOKED') {
+    return <span className={`${base} border-sky-200 bg-sky-50 text-sky-800`}>조리 완료</span>
+  }
+  if (['CONSUMED', 'EATEN'].includes(intake) || ['CONSUMED', 'EATEN'].includes(meal)) {
+    return <span className={`${base} border-emerald-200 bg-emerald-100 text-emerald-800`}>섭취 완료</span>
+  }
+  if (intake === 'SKIPPED' || meal === 'SKIPPED') {
+    return <span className={`${base} border-gray-200 bg-gray-100 text-gray-600`}>건너뜀</span>
+  }
+  return <MealPlanStatusBadge status={meal || 'DRAFT'} />
 }

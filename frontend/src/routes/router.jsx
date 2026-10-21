@@ -1,29 +1,22 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom'
-import { AppLayout } from '@/components/layout/AppLayout'
-import { DashboardPage } from '@/pages/DashboardPage'
-import { FridgePage } from '@/pages/FridgePage'
-import { LoginPage } from '@/pages/LoginPage'
-import { MyPage } from '@/pages/MyPage'
-import { RecipeDetailPage } from '@/pages/RecipeDetailPage'
-import { RecommendPage } from '@/pages/RecommendPage'
-import { ShoppingPage } from '@/pages/ShoppingPage'
-import { WorkoutPage } from '@/pages/WorkoutPage'
-
-// TODO(로그인 담당): 로그인 구현 후 AppLayout 아래 화면들을 로그인 가드로 감싼다.
+import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { AppLayout } from '@/components/layout/AppLayout';
+const page = (load, name) => async () => ({ Component: (await load())[name] });
 export const router = createBrowserRouter([
-  { path: '/login', element: <LoginPage /> },
-  {
-    element: <AppLayout />,
-    children: [
-      { path: '/', element: <Navigate to="/dashboard" replace /> },
-      { path: '/dashboard', element: <DashboardPage /> },
-      { path: '/recommend', element: <RecommendPage /> },
-      { path: '/recipes/:id', element: <RecipeDetailPage /> },
-      { path: '/fridge', element: <FridgePage /> },
-      { path: '/shopping', element: <ShoppingPage /> },
-      { path: '/workout', element: <WorkoutPage /> },
-      { path: '/mypage', element: <MyPage /> },
-    ],
-  },
-  { path: '*', element: <Navigate to="/dashboard" replace /> },
-])
+    { children: [
+            { path: '/login', lazy: page(() => import('@/pages/LoginPage'), 'LoginPage') },
+            { path: '/signup', lazy: page(() => import('@/pages/SignupPage'), 'SignupPage') },
+        ] },
+    { element: <AppLayout />, children: [
+            { path: '/', element: <Navigate to="/dashboard" replace/> },
+            { path: '/dashboard', lazy: page(() => import('@/pages/DashboardPage'), 'DashboardPage') },
+            { path: '/recommend', lazy: page(() => import('@/pages/RecommendPage'), 'RecommendPage') },
+            { path: '/recipes/:id', lazy: page(() => import('@/pages/RecipeDetailPage'), 'RecipeDetailPage') },
+            { path: '/fridge', lazy: page(() => import('@/pages/FridgePage'), 'FridgePage') },
+            { path: '/shopping', lazy: page(() => import('@/pages/ShoppingPage'), 'ShoppingPage') },
+            { path: '/workout', lazy: page(() => import('@/pages/WorkoutPage'), 'WorkoutPage') },
+            { path: '/calendar', lazy: page(() => import('@/pages/CalendarPage'), 'CalendarPage') },
+            { path: '/weight', lazy: page(() => import('@/pages/WeightPage'), 'WeightPage') },
+            { path: '/mypage', lazy: page(() => import('@/pages/MyPage'), 'MyPage') },
+        ] },
+    { path: '*', element: <Navigate to="/dashboard" replace/> },
+]);
