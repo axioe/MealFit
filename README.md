@@ -64,6 +64,8 @@ cd frontend && npm install && npm run dev   # http://localhost:5173
 
 ## 배포 (AWS EC2)
 
+**서비스 주소: http://3.39.100.188**
+
 EC2 한 대에서 Docker Compose로 frontend(nginx) · backend(Spring) · MariaDB를 함께 띄운다. 외부에 열리는 포트는 80뿐이고, nginx가 `/api`를 Spring으로 넘긴다.
 
 ```
@@ -71,9 +73,31 @@ EC2 한 대에서 Docker Compose로 frontend(nginx) · backend(Spring) · MariaD
                                                      └──────▶ ai-service(:8000, 추가 예정)
 ```
 
+### 자동 배포 (GitHub Actions)
+
+`main`에 push(PR 머지 포함)되면 CI가 통과한 뒤 EC2에 자동 배포된다. 반영까지 약 2~3분.
+
+```
+main push ─▶ backend (test) ─┐
+          └▶ frontend (lint, build) ─┴▶ deploy (EC2): git pull → docker compose up --build → 화면·API 응답 확인
+```
+
+| 이벤트 | 테스트 | 배포 |
+|---|---|---|
+| PR (`main` 대상) | ✅ | ❌ |
+| `main` push (PR 머지) | ✅ | ✅ (테스트 통과 시) |
+| Actions → CI → **Run workflow** (`main`) | ✅ | ✅ 코드 변경 없이 다시 배포할 때 |
+
+- 배포 결과는 Actions 탭의 `deploy (EC2)`에서 본다. 실패하면 서버는 직전 버전 그대로 돌아간다
+- **`main`에 머지되는 순간 새 Flyway 마이그레이션이 운영 DB에 적용된다.** 머지 전에 로컬에서 꼭 확인하고, 이미 머지된 `V*.sql`은 수정하지 않는다
+- 설정: `.github/workflows/ci.yml`의 `deploy` 작업. 서버 IP는 `EC2_HOST`(파일 안), SSH 키는 Secret `EC2_SSH_KEY`
+- 서버의 `.env`(DB 비밀번호 등)는 git이 무시하는 파일이라 배포해도 바뀌지 않는다
+
+### 서버 구성
+
 - 파일: `docker-compose.prod.yml`, `backend/Dockerfile`, `frontend/Dockerfile`, `frontend/nginx.conf`, `.env.prod.example`, `application-prod.yml`
-- EC2: Ubuntu 24.04, t3.small, 서울 리전, 탄력적 IP 연결
-- 보안 그룹: 22(관리자 IP만), 80(전체). 8080·8000은 열지 않는다. 3306은 DBeaver 직접 접속이 필요할 때만 팀원 IP로 연다
+- EC2: Ubuntu 24.04, t3.small(2GB + 스왑 2GB), 서울 리전
+- 보안 그룹: 22(자동 배포 때문에 전체, 키 파일로만 접속), 80(전체). 8080·8000·3306은 열지 않는다
 
 **최초 1회 (서버에서)**
 ```bash
@@ -84,7 +108,7 @@ cp .env.prod.example .env        # DB_PASSWORD, DB_ROOT_PASSWORD 채우기
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-**다시 배포 (`main`에 머지된 코드만)**
+**수동 배포 (자동 배포가 안 될 때만)**
 ```bash
 cd ~/MealFit && git pull && docker compose -f docker-compose.prod.yml up -d --build
 ```
@@ -132,11 +156,13 @@ cd ~/MealFit && git pull && docker compose -f docker-compose.prod.yml up -d --bu
 ## 개발 규칙
 
 ### 브랜치 · 커밋
-- `main`: 발표/배포용. 직접 push 금지
-- `develop`: 통합 브랜치. 매일 저녁 여기에 합치고 전체 흐름을 돌려본다
-- 작업 브랜치: `feature/{영역}-{내용}` 예) `feature/inventory-stock-in`, `fix/auth-refresh`
+- `main`: 통합 + 배포 브랜치. **머지되면 바로 운영 서버(http://3.39.100.188)에 자동 배포된다.** 직접 push 금지
+- 작업 브랜치: `main`에서 만든다. `feature/{영역}-{내용}` 예) `feature/inventory-stock-in`, `fix/auth-refresh`
 - 커밋 메시지: `feat: 재고 입고 API`, `fix: ...`, `refactor: ...`, `docs: ...`
-- PR은 `develop`으로. CI(백엔드 테스트, 프론트 빌드)가 통과해야 머지
+- PR은 `main`으로. CI(백엔드 테스트, 프론트 lint·빌드)가 통과해야 머지
+- PR 올리기 전에 `main`을 작업 브랜치에 먼저 합쳐서(pull) 충돌을 풀고, 로컬에서 실행해 본다
+- 머지 후 Actions의 `deploy (EC2)`가 초록색인지, 서버에서 화면이 동작하는지 확인한다
+- 머지된 작업 브랜치는 삭제해도 된다
 
 ### DB 스키마 (Flyway)
 - 스키마는 `backend/src/main/resources/db/migration`의 SQL로만 바꾼다 (`ddl-auto: validate`)

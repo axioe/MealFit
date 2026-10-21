@@ -8,7 +8,11 @@ import com.mealfit.domain.recipe.RecipeSource;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-/** 식단 한 끼. recipe.source로 "AI 생성 / 검증된 로컬 대체" 배지를 표시한다. */
+/**
+ * 식단 한 끼. recipe.source로 "AI 생성 / 검증된 로컬 대체" 배지를 표시한다.
+ *
+ * @param cooked 조리 완료(재고 차감) 상태인지. 조리 기록이 없거나 취소(복원)했으면 false
+ */
 public record MealPlanResponse(
         Long id,
         LocalDate planDate,
@@ -16,7 +20,8 @@ public record MealPlanResponse(
         MealPlanStatus status,
         int servings,
         String recommendationReason,
-        RecipeSummary recipe
+        RecipeSummary recipe,
+        boolean cooked
 ) {
 
     public record RecipeSummary(Long id, String name, int cookTimeMin, BigDecimal calories,
@@ -28,8 +33,13 @@ public record MealPlanResponse(
         }
     }
 
+    /** 조리 전 식단(초안·방금 확정·취소)용 */
     public static MealPlanResponse from(MealPlan plan) {
+        return from(plan, false);
+    }
+
+    public static MealPlanResponse from(MealPlan plan, boolean cooked) {
         return new MealPlanResponse(plan.getId(), plan.getPlanDate(), plan.getMealType(), plan.getStatus(),
-                plan.getServings(), plan.getRecommendationReason(), RecipeSummary.from(plan.getRecipe()));
+                plan.getServings(), plan.getRecommendationReason(), RecipeSummary.from(plan.getRecipe()), cooked);
     }
 }

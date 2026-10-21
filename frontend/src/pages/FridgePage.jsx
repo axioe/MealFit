@@ -1,396 +1,339 @@
-import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, History, Plus, Refrigerator, Search, Trash2, X } from 'lucide-react';
-import { ExpirationBadge } from '@/components/common/StatusBadge';
-import { getExpirationStatus } from '@/lib/expiration';
-export function FridgePage() {
-    const groups = [];
-    const standardIngredients = [];
-    const transactions = [];
-    const isLoading = false;
-    // Filters & Search
-    const [searchQuery, setSearchQuery] = useState('');
-    const [storageFilter, setStorageFilter] = useState('all');
-    const [expandedGroups, setExpandedGroups] = useState({});
-    // Modals
-    const [showAddModal, setShowAddModal] = useState(false);
-    const [editingLot, setEditingLot] = useState(null);
-    const [disposingLot, setDisposingLot] = useState(null);
-    const [disposeQty, setDisposeQty] = useState("");
-    const [disposeReason, setDisposeReason] = useState('기한 경과로 인한 폐기');
-    const [showHistoryModal, setShowHistoryModal] = useState(false);
-    // Form state for Add/Edit
-    const [formData, setFormData] = useState({ ingredientName: "", quantity: "", unit: "", storage: "", expirationType: "", expirationDate: "", minStock: "", memo: "" });
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const toggleGroup = (key) => {
-        setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
-    };
-    const openAddModal = (defaultName) => {
-        setEditingLot(null);
-        setFormData({
-            ingredientName: defaultName || '',
-            quantity: 1,
-            unit: '개',
-            storage: 'fridge',
-            expirationType: 'expiration',
-            expirationDate: '',
-            minStock: 0,
-            memo: ''
-        });
-        setShowAddModal(true);
-    };
-    const openEditModal = (lot) => {
-        setEditingLot(lot);
-        setFormData({
-            ingredientName: lot.ingredientName,
-            quantity: lot.quantity,
-            unit: lot.unit,
-            storage: lot.storage,
-            expirationType: lot.expirationType,
-            expirationDate: lot.expirationDate || '',
-            minStock: lot.minStock || 0,
-            memo: lot.memo || ''
-        });
-        setShowAddModal(true);
-    };
-    const handleOpenDisposeModal = (lot) => {
-        setDisposingLot(lot);
-        setDisposeQty(lot.quantity);
-        setDisposeReason('기한 경과로 인한 폐기');
-    };
-    // Filter groups
-    const filteredGroups = groups.filter(g => {
-        const matchSearch = g.ingredientName.toLowerCase().includes(searchQuery.toLowerCase());
-        if (!matchSearch)
-            return false;
-        if (storageFilter === 'all')
-            return true;
-        return g.lots.some(l => l.storage === storageFilter);
-    });
-    return (<>
-      {/* Top Action Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6">
-        {/* Search */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2"/>
-          <input type="text" placeholder="식재료명 검색 (예: 달걀, 두부, 양파)" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-gray-200 text-sm focus:outline-emerald-500 shadow-2xs"/>
-        </div>
+import { useId, useState } from 'react'
+import { Archive, ChevronDown, History, Package, Plus, Refrigerator, RefreshCw, Search, Snowflake, TriangleAlert, X } from 'lucide-react'
+import { getErrorMessage } from '@/api/client'
+import { useInventory } from '@/api/inventory'
+import { InventoryHistoryPanel } from '@/components/common/InventoryHistoryPanel'
+import { InventoryLotDialog } from '@/components/common/InventoryLotDialog'
+import { StockInDialog } from '@/components/common/StockInDialog'
+import { Spinner } from '@/components/common/Spinner'
+import { ExpirationBadge } from '@/components/common/StatusBadge'
+import { EXPIRATION_STATUS, LOT_STATUS, STORAGE_LOCATION } from '@/lib/enums'
+import { LOT_STATUS_LABEL, STORAGE_LABEL } from '@/lib/labels'
 
-        {/* Buttons */}
+const ALL_STORAGE = 'ALL'
+const STORAGE_FILTERS = [
+  { value: ALL_STORAGE, label: '전체', icon: Package },
+  { value: STORAGE_LOCATION.FRIDGE, label: STORAGE_LABEL[STORAGE_LOCATION.FRIDGE], icon: Refrigerator },
+  { value: STORAGE_LOCATION.FREEZER, label: STORAGE_LABEL[STORAGE_LOCATION.FREEZER], icon: Snowflake },
+  { value: STORAGE_LOCATION.PANTRY, label: STORAGE_LABEL[STORAGE_LOCATION.PANTRY], icon: Archive },
+]
+const EXPIRATION_PRIORITY = [
+  EXPIRATION_STATUS.EXPIRED,
+  EXPIRATION_STATUS.TODAY,
+  EXPIRATION_STATUS.IMMINENT,
+  EXPIRATION_STATUS.NORMAL,
+  EXPIRATION_STATUS.UNKNOWN,
+]
+const quantityFormatter = new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 3 })
+
+function formatQuantity(quantity, unit) {
+  return `${quantityFormatter.format(quantity)}${unit}`
+}
+
+function summarizeLots(lots) {
+  const activeLots = lots.filter((lot) => lot.status === LOT_STATUS.ACTIVE)
+  // 소수 셋째 자리까지 정수로 합산해 표시 오차를 줄인다.
+  const total = activeLots.reduce((sum, lot) => sum + Math.round(Number(lot.quantity) * 1000), 0)
+  const expired = activeLots
+    .filter((lot) => lot.expirationStatus === EXPIRATION_STATUS.EXPIRED)
+    .reduce((sum, lot) => sum + Math.round(Number(lot.quantity) * 1000), 0)
+  return { totalQuantity: total / 1000, availableQuantity: (total - expired) / 1000, expiredQuantity: expired / 1000 }
+}
+
+function LotCard({ lot, inactive = false, onEdit, onDispose, onHistory }) {
+  return (
+    <li className={`min-w-0 rounded-xl border p-4 ${inactive ? 'border-gray-200 bg-gray-100/70' : 'border-gray-200 bg-white'}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`min-w-0 break-all text-base font-bold ${inactive ? 'text-gray-500' : 'text-gray-900'}`}>
+          {formatQuantity(lot.quantity, lot.unit)}
+        </span>
+        <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
+          {STORAGE_LABEL[lot.storageLocation]}
+        </span>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${inactive ? 'bg-gray-200 text-gray-600' : 'bg-emerald-50 text-emerald-700'}`}>
+          {LOT_STATUS_LABEL[lot.status]}
+        </span>
+      </div>
+      <dl className="mt-3 grid gap-2 text-xs text-gray-500 sm:grid-cols-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <dt>소비기한</dt>
+          <dd className="min-w-0">
+            <ExpirationBadge status={lot.expirationStatus} date={lot.expiryDate} />
+          </dd>
+        </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowHistoryModal(true)} className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold shadow-2xs min-h-[44px] cursor-pointer">
-            <History className="w-4 h-4 text-gray-500"/>
-            <span>수량 변경 이력</span>
-          </button>
+          <dt>최소 유지량</dt>
+          <dd className="min-w-0 break-all text-gray-700">{formatQuantity(lot.minStockQty, lot.unit)}</dd>
+        </div>
+        <div className="flex items-center gap-2">
+          <dt>묶음 번호</dt>
+          <dd>#{lot.id}</dd>
+        </div>
+        {lot.memo && (
+          <div className="min-w-0 sm:col-span-2">
+            <dt className="sr-only">메모</dt>
+            <dd className="whitespace-pre-wrap break-all text-gray-600">{lot.memo}</dd>
+          </div>
+        )}
+      </dl>
+      <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-100 pt-3">
+        {!inactive && lot.status === LOT_STATUS.ACTIVE && <>
+          <button type="button" onClick={() => onEdit(lot)} className="btn-secondary min-h-11 text-xs">수정</button>
+          <button type="button" onClick={() => onDispose(lot)} className="min-h-11 cursor-pointer rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs font-semibold text-rose-700 hover:bg-rose-100">폐기</button>
+        </>}
+        <button type="button" onClick={() => onHistory(lot.id)} className="btn-secondary min-h-11 text-xs">이 묶음 이력</button>
+      </div>
+    </li>
+  )
+}
 
-          <button onClick={() => openAddModal()} className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs min-h-[44px] cursor-pointer">
-            <Plus className="w-4 h-4"/>
-            <span>재료 등록</span>
-          </button>
+function InventoryGroup({ group, onEdit, onDispose, onHistory }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const panelId = useId()
+  const activeLots = group.lots.filter((lot) => lot.status === LOT_STATUS.ACTIVE)
+  const usableLots = activeLots.filter((lot) => lot.expirationStatus !== EXPIRATION_STATUS.EXPIRED)
+  const expiredLots = activeLots.filter((lot) => lot.expirationStatus === EXPIRATION_STATUS.EXPIRED)
+  const worstStatus = EXPIRATION_PRIORITY.find((status) => activeLots.some((lot) => lot.expirationStatus === status))
+  const earliestExpiry = activeLots.map((lot) => lot.expiryDate).filter(Boolean).sort()[0]
+
+  return (
+    <article className="min-w-0 overflow-hidden rounded-2xl border border-gray-200 bg-white">
+      <h3>
+        <button
+          type="button"
+          aria-expanded={isExpanded}
+          aria-controls={panelId}
+          onClick={() => setIsExpanded((expanded) => !expanded)}
+          className="flex min-h-11 w-full cursor-pointer items-start gap-3 p-4 text-left transition hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-emerald-600 md:p-5"
+        >
+          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-sm font-bold ${activeLots.length ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-gray-200 bg-gray-100 text-gray-500'}`}>
+            {group.ingredientName.slice(0, 1)}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span className="break-all text-base font-bold text-gray-900">{group.ingredientName}</span>
+              <span className="min-w-0 break-all text-sm font-semibold text-gray-700">총 {formatQuantity(group.totalQuantity, group.unit)}</span>
+            </span>
+            <span className="mt-1 block text-xs font-normal leading-5 text-gray-500">
+              {activeLots.length ? `보관 중 ${activeLots.length}개 묶음` : '활성 재고 없음'}
+
+            </span>
+            <span className="mt-2 flex flex-wrap items-center gap-2">
+              {worstStatus && <ExpirationBadge status={worstStatus} />}
+              <span className="text-xs font-normal text-gray-500">
+                {earliestExpiry ? `가장 빠른 소비기한 ${earliestExpiry}` : activeLots.length ? '소비기한 미등록' : '보관 기록을 확인해 주세요'}
+              </span>
+            </span>
+          </span>
+          <ChevronDown aria-hidden="true" className={`mt-2 h-5 w-5 shrink-0 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+        </button>
+      </h3>
+      <dl className="grid grid-cols-2 gap-3 border-t border-gray-100 px-4 py-3 text-xs md:px-5">
+        <div>
+          <dt className="text-gray-500">사용 가능</dt>
+          <dd className="mt-1 break-all text-sm font-bold text-emerald-700">{formatQuantity(group.availableQuantity, group.unit)}</dd>
+        </div>
+        <div>
+          <dt className="text-gray-500">기한 경과</dt>
+          <dd className={`mt-1 break-all text-sm font-bold ${group.expiredQuantity > 0 ? 'text-rose-700' : 'text-gray-600'}`}>{formatQuantity(group.expiredQuantity, group.unit)}</dd>
+        </div>
+      </dl>
+      <div id={panelId} hidden={!isExpanded} className="space-y-4 border-t border-gray-200 bg-gray-50 p-4 md:p-5">
+        {usableLots.length > 0 && (
+          <section aria-label="보관 중인 묶음">
+            <h4 className="mb-2 text-xs font-bold text-gray-700">보관 중인 묶음</h4>
+            <ul className="space-y-2">{usableLots.map((lot) => <LotCard key={lot.id} lot={lot} onEdit={onEdit} onDispose={onDispose} onHistory={onHistory} />)}</ul>
+          </section>
+        )}
+        {expiredLots.length > 0 && (
+          <section aria-label="소비기한 경과 묶음">
+            <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold text-rose-700">
+              <TriangleAlert aria-hidden="true" className="h-4 w-4" />소비기한이 지난 묶음
+            </h4>
+            <p className="mb-2 text-xs text-rose-700">사용 가능 수량에서 제외된 재고입니다.</p>
+            <ul className="space-y-2">{expiredLots.map((lot) => <LotCard key={lot.id} lot={lot} onEdit={onEdit} onDispose={onDispose} onHistory={onHistory} />)}</ul>
+          </section>
+        )}
+      </div>
+    </article>
+  )
+}
+
+export function FridgePage() {
+  const { data, isPending, isError, error, isFetching, refetch } = useInventory()
+  const [showStockIn, setShowStockIn] = useState(false)
+  const [lotAction, setLotAction] = useState(null)
+  const [showHistory, setShowHistory] = useState(false)
+  const [historyLotId, setHistoryLotId] = useState(null)
+  const [successMessage, setSuccessMessage] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [storageFilter, setStorageFilter] = useState(ALL_STORAGE)
+  const groups = data?.groups ?? []
+  const allLots = groups.flatMap((group) => group.lots)
+  const search = searchQuery.trim().toLocaleLowerCase('ko-KR')
+  const filteredGroups = groups
+    .filter((group) => group.ingredientName.toLocaleLowerCase('ko-KR').includes(search))
+    .map((group) => ({
+      ...group,
+      lots: group.lots.filter((lot) => storageFilter === ALL_STORAGE || lot.storageLocation === storageFilter),
+    }))
+  const visibleGroups = filteredGroups
+    .map((group) => {
+      const lots = group.lots.filter((lot) => lot.status === LOT_STATUS.ACTIVE)
+      return { ...group, lots, ...summarizeLots(lots) }
+    })
+    .filter((group) => group.lots.length > 0)
+  const archivedGroups = filteredGroups
+    .map((group) => ({
+      ...group,
+      lots: group.lots.filter((lot) => lot.status === LOT_STATUS.DEPLETED || lot.status === LOT_STATUS.DISPOSED),
+    }))
+    .filter((group) => group.lots.length > 0)
+  const archivedLotCount = archivedGroups.reduce((count, group) => count + group.lots.length, 0)
+  const visibleActiveLots = visibleGroups.flatMap((group) => group.lots).filter((lot) => lot.status === LOT_STATUS.ACTIVE)
+  const activeIngredientCount = new Set(visibleGroups.filter((group) => group.lots.some((lot) => lot.status === LOT_STATUS.ACTIVE)).map((group) => group.ingredientName)).size
+  const imminentCount = visibleActiveLots.filter((lot) => lot.expirationStatus === EXPIRATION_STATUS.IMMINENT || lot.expirationStatus === EXPIRATION_STATUS.TODAY).length
+  const hasFilters = searchQuery !== '' || storageFilter !== ALL_STORAGE
+  const hasAnyActiveLots = groups.some((group) => group.lots.some((lot) => lot.status === LOT_STATUS.ACTIVE))
+
+  function openEdit(lot) {
+    setSuccessMessage('')
+    setLotAction({ lot, mode: 'adjust' })
+  }
+
+  function openDispose(lot) {
+    setSuccessMessage('')
+    setLotAction({ lot, mode: 'dispose' })
+  }
+
+  function openHistory(lotId = null) {
+    setHistoryLotId(lotId)
+    setShowHistory(true)
+  }
+
+  function resetFilters() {
+    setSearchQuery('')
+    setStorageFilter(ALL_STORAGE)
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm leading-6 text-gray-600">재료별 수량과 소비기한을 한눈에 확인해 보세요.</p>
+        <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => openHistory()} className="btn-secondary min-h-11 text-xs"><History aria-hidden="true" className="h-4 w-4" />재고 변경 이력</button>
+        <button type="button" onClick={() => refetch()} disabled={isFetching} className="btn-secondary min-h-11 text-xs">
+          <RefreshCw aria-hidden="true" className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+          {isFetching ? '불러오는 중...' : '새로고침'}
+        </button>
+        <button type="button" onClick={() => { setSuccessMessage(''); setShowStockIn(true) }} className="btn-primary min-h-11 text-xs">
+          <Plus aria-hidden="true" className="h-4 w-4" />식재료 추가
+        </button>
         </div>
       </div>
+      {successMessage && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{successMessage}</p>}
+      {lotAction && <InventoryLotDialog key={`${lotAction.mode}-${lotAction.lot.id}`} lot={lotAction.lot} mode={lotAction.mode}
+        onClose={() => setLotAction(null)}
+        onSuccess={(lot, disposed) => {
+          setLotAction(null)
+          setSuccessMessage(disposed
+            ? `${lot.ingredientName} 폐기가 처리되었습니다. 남은 수량은 ${formatQuantity(lot.quantity, lot.unit)}입니다.`
+            : `${lot.ingredientName} 묶음 #${lot.id} 정보가 저장되었습니다.`)
+        }} />}
+      {showHistory && <InventoryHistoryPanel lotId={historyLotId} lots={allLots} onSelectLot={setHistoryLotId} onClose={() => setShowHistory(false)} />}
+      {showStockIn && <StockInDialog onClose={() => setShowStockIn(false)} onSuccess={(lot) => {
+        setShowStockIn(false)
+        resetFilters()
+        setSuccessMessage(`${lot.ingredientName} ${formatQuantity(lot.quantity, lot.unit)}이(가) 새 묶음으로 등록되었습니다.`)
+      }} />}
 
-      {/* Storage Filter Tabs */}
-      <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-1">
-        {[
-            { key: 'all', label: '전체 재료' },
-            { key: 'fridge', label: '🧊 냉장 보관' },
-            { key: 'freezer', label: '❄️ 냉동 보관' },
-            { key: 'pantry', label: '🧺 실온 보관' }
-        ].map(tab => (<button key={tab.key} onClick={() => setStorageFilter(tab.key)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all min-h-[40px] cursor-pointer shrink-0 ${storageFilter === tab.key
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-            {tab.label}
-          </button>))}
-      </div>
 
-      {/* Main Inventory Group List */}
-      {isLoading ? (<div className="text-center py-16 text-gray-400 text-sm">냉장고 재고를 불러오는 중입니다...</div>) : filteredGroups.length === 0 ? (<div className="text-center py-16 px-4 bg-white rounded-2xl border border-dashed border-gray-200">
-          <Refrigerator className="w-12 h-12 text-gray-300 mx-auto mb-3"/>
-          <h4 className="font-bold text-gray-800 text-base mb-1">등록된 식재료가 없습니다.</h4>
-          <p className="text-xs text-gray-500 mb-5 max-w-md mx-auto">
-            달걀, 두부, 양파 등 자주 쓰는 재료를 등록해두시면 AI가 기한 임박 재료를 우선 소진하는 식단을 추천해드립니다.
-          </p>
-          <button onClick={() => openAddModal()} className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm shadow-xs hover:bg-emerald-700 cursor-pointer">
-            <Plus className="w-4 h-4"/> 첫 재료 등록하기
-          </button>
-        </div>) : (<div className="space-y-4">
-          {filteredGroups.map(group => {
-                const isExpanded = expandedGroups[group.ingredientName] ?? false;
-                const lotsCount = group.lots.length;
-                return (<div key={group.ingredientName} className="bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden transition-all">
-                {/* Group Summary Row */}
-                <div onClick={() => toggleGroup(group.ingredientName)} className="p-4 md:p-5 flex items-center justify-between cursor-pointer hover:bg-gray-50/70 transition-colors">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 font-bold flex items-center justify-center shrink-0 border border-emerald-100">
-                      {group.ingredientName[0]}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="font-bold text-base text-gray-900 truncate">
-                          {group.ingredientName}
-                        </h4>
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-gray-100 text-gray-700">
-                          총 {group.totalQuantity} {group.unit}
-                        </span>
-                        {lotsCount > 1 && (<span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
-                            {lotsCount}개 묶음 분리 관리
-                          </span>)}
-                      </div>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-                        <span>가장 빠른 기한: {group.earliestExpiration || '미등록'}</span>
-                      </div>
-                    </div>
+      <section aria-label="재고 검색 및 보관 위치 필터" className="space-y-3">
+        <div className="relative">
+          <label htmlFor="fridge-search" className="sr-only">식재료명 검색</label>
+          <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input id="fridge-search" type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="식재료명 검색 (예: 두부, 양파)" className="input min-h-11 pl-10 pr-11 [&::-webkit-search-cancel-button]:appearance-none" />
+          {searchQuery && (
+            <button type="button" aria-label="검색어 지우기" onClick={() => setSearchQuery('')} className="absolute top-0 right-0 flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl text-gray-500 hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-emerald-600">
+              <X aria-hidden="true" className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        <div role="group" aria-label="보관 위치" className="grid grid-cols-4 gap-2 sm:flex">
+          {STORAGE_FILTERS.map(({ value, label, icon: Icon }) => (
+            <button key={value} type="button" aria-pressed={storageFilter === value} onClick={() => setStorageFilter(value)} className={`flex min-h-11 cursor-pointer items-center justify-center gap-1.5 rounded-xl border px-2 py-2.5 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 sm:px-5 ${storageFilter === value ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-gray-200 bg-white text-gray-600 hover:border-emerald-300 hover:bg-emerald-50'}`}>
+              <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />{label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {isPending ? (
+        <div className="card flex min-h-60 flex-col items-center justify-center gap-4">
+          <Spinner /><p className="text-sm text-gray-500">냉장고 재고를 불러오고 있습니다.</p>
+        </div>
+      ) : (
+        <>
+          {isError && (
+            <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4">
+              <div className="min-w-0">
+                <p className="flex items-start gap-2 whitespace-pre-wrap break-all text-sm text-rose-700"><TriangleAlert aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />{getErrorMessage(error)}</p>
+                {data && <p className="mt-2 text-xs text-rose-700">이전에 불러온 재고를 표시하고 있습니다.</p>}
+              </div>
+              <button type="button" onClick={() => refetch()} disabled={isFetching} className="btn-secondary min-h-11 text-xs">{isFetching ? '불러오는 중...' : '다시 시도'}</button>
+            </div>
+          )}
+          {data && (
+            <>
+              <section aria-label="현재 조회 조건의 재고 요약" className="grid grid-cols-3 gap-2 md:gap-4">
+                {[
+                  { label: '보관 재료', count: activeIngredientCount, unit: '종' },
+                  { label: '활성 묶음', count: visibleActiveLots.length, unit: '개' },
+                  { label: '오늘·임박', count: imminentCount, unit: '개' },
+                ].map(({ label, count, unit }) => (
+                  <div key={label} className="min-w-0 rounded-2xl border border-gray-200 bg-white p-3 md:p-5">
+                    <p className="text-xs text-gray-500">{label}</p>
+                    <p className="mt-2 text-2xl font-extrabold text-gray-900">{count}<span className="ml-1 text-sm font-medium text-gray-500">{unit}</span></p>
                   </div>
-
-                  <div className="flex items-center gap-3 shrink-0">
-                    <ExpirationBadge status={group.worstStatus} date={group.earliestExpiration}/>
-                    <button type="button" className="p-1 rounded-lg text-gray-400 hover:text-gray-600">
-                      {isExpanded ? <ChevronUp className="w-5 h-5"/> : <ChevronDown className="w-5 h-5"/>}
-                    </button>
-                  </div>
+                ))}
+              </section>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500" aria-live="polite">
+                <p>검색 결과 <span className="font-semibold text-gray-700">{visibleGroups.length}</span>개 재료·단위 그룹</p>
+                <p>소비기한 기준일 {data.asOfDate}</p>
+              </div>
+              {!hasAnyActiveLots && groups.length > 0 && (
+                <p className="rounded-xl border border-gray-200 bg-gray-100 p-4 text-sm text-gray-600">현재 보관 중인 재고가 없습니다. ‘소진·폐기 기록 보기’에서 이전 묶음을 확인할 수 있습니다.</p>
+              )}
+              {visibleGroups.length === 0 ? (
+                <div className="card flex min-h-60 flex-col items-center justify-center px-5 text-center">
+                  <Refrigerator aria-hidden="true" className="mb-4 h-10 w-10 text-gray-300" />
+                  <h3 className="text-base font-bold text-gray-900">{!hasAnyActiveLots ? '보관 중인 재고가 없습니다' : '조건에 맞는 재료가 없습니다'}</h3>
+                  <p className="mt-2 text-sm leading-6 text-gray-500">{!hasAnyActiveLots ? '새 식재료를 등록하고 소비기한별로 관리해 보세요.' : '검색어나 보관 위치를 바꿔서 다시 확인해 주세요.'}</p>
+                  {!hasAnyActiveLots && <button type="button" onClick={() => { setSuccessMessage(''); setShowStockIn(true) }} className="btn-primary mt-4 min-h-11 text-xs">식재료 추가</button>}
+                  {hasFilters && <button type="button" onClick={resetFilters} className="btn-secondary mt-4 min-h-11 text-xs">검색·필터 초기화</button>}
                 </div>
-
-                {/* Expanded Distinct Lots (Requirement #5) */}
-                {isExpanded && (<div className="border-t border-gray-100 bg-gray-50/50 p-4 space-y-2.5">
-                    <div className="flex items-center justify-between text-xs text-gray-500 px-1 font-semibold">
-                      <span>별도 관리 묶음 상세:</span>
-                      <button onClick={e => {
-                            e.stopPropagation();
-                            openAddModal(group.ingredientName);
-                        }} className="text-emerald-700 font-bold hover:underline flex items-center gap-1 cursor-pointer">
-                        <Plus className="w-3.5 h-3.5"/> 이 재료 새 묶음 추가
-                      </button>
-                    </div>
-
-                    {group.lots.map(lot => {
-                            const lotStatus = getExpirationStatus(lot.expirationDate, 3, todayStr);
-                            const storageLabel = {
-                                fridge: '🧊 냉장',
-                                freezer: '❄️ 냉동',
-                                pantry: '🧺 실온'
-                            }[lot.storage];
-                            return (<div key={lot.id} className="p-3.5 rounded-xl bg-white border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-2xs">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-sm text-gray-800">
-                                {lot.quantity} {lot.unit}
-                              </span>
-                              <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-600 font-medium text-[11px]">
-                                {storageLabel}
-                              </span>
-                              <ExpirationBadge status={lotStatus} date={lot.expirationDate}/>
-                            </div>
-                            <div className="text-gray-500 text-[11px] flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                              <span>기한 유형: {lot.expirationType === 'use_by' ? '소비기한' : lot.expirationType === 'expiration' ? '유통기한' : lot.expirationType === 'custom' ? '직접지정' : '미등록'}</span>
-                              {lot.minStock ? <span>최소유지: {lot.minStock}{lot.unit}</span> : null}
-                              {lot.memo ? <span className="text-gray-600 italic">“{lot.memo}”</span> : null}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
-                            <button onClick={() => openEditModal(lot)} className="px-2.5 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 font-medium min-h-[36px] cursor-pointer">
-                              수정
-                            </button>
-                            <button onClick={() => handleOpenDisposeModal(lot)} className="px-2.5 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 font-medium min-h-[36px] cursor-pointer">
-                              폐기 기록
-                            </button>
-                            <button className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg min-h-[36px] min-w-[36px] flex items-center justify-center cursor-pointer" title="삭제" disabled>
-                              <Trash2 className="w-4 h-4"/>
-                            </button>
-                          </div>
-                        </div>);
-                        })}
-                  </div>)}
-              </div>);
-            })}
-        </div>)}
-
-      {/* Add / Edit Lot Modal */}
-      {showAddModal && (<div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
-              <h3 className="text-base md:text-lg font-bold text-gray-900">
-                {editingLot ? '재고 묶음 정보 수정' : '신규 재료 묶음 등록'}
-              </h3>
-              <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg cursor-pointer">
-                <X className="w-5 h-5"/>
-              </button>
-            </div>
-
-            {/* Quick Pick Standard Ingredients */}
-            {!editingLot && (<div className="mb-4">
-                <label className="text-xs font-bold text-gray-600 mb-1.5 block">
-                  자주 쓰는 식재료 빠른 선택:
-                </label>
-                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1 bg-gray-50 rounded-xl border border-gray-200">
-                  {standardIngredients.slice(0, 10).map(std => (<button key={std.id} type="button" className="px-2.5 py-1 rounded-lg bg-white border border-gray-200 hover:border-emerald-500 hover:text-emerald-700 text-xs text-gray-700 font-medium transition-colors cursor-pointer" disabled>
-                      {std.name} ({std.standardUnit})
-                    </button>))}
+              ) : (
+                <div className="space-y-4">
+                  {visibleGroups.map((group) => <InventoryGroup key={JSON.stringify([group.ingredientName, group.unit])} group={group} onEdit={openEdit} onDispose={openDispose} onHistory={openHistory} />)}
                 </div>
-              </div>)}
-
-            <form onSubmit={event => event.preventDefault()} className="space-y-4 text-xs">
-              <div>
-                <label className="font-bold text-gray-700 block mb-1">재료명 *</label>
-                <input type="text" required placeholder="예: 달걀, 두부, 양파" value={formData.ingredientName} onChange={e => setFormData({ ...formData, ingredientName: e.target.value })} disabled={Boolean(editingLot)} className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-emerald-500 disabled:bg-gray-100"/>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-gray-700 block mb-1">수량 *</label>
-                  <input type="number" step="any" required min="0.1" value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: Number(e.target.value) })} className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-emerald-500"/>
-                </div>
-                <div>
-                  <label className="font-bold text-gray-700 block mb-1">단위 *</label>
-                  <select value={formData.unit} onChange={e => setFormData({ ...formData, unit: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-emerald-500 bg-white"><option value="" disabled>선택하세요</option>
-                    <option value="개">개</option>
-                    <option value="g">g (그램)</option>
-                    <option value="kg">kg (킬로그램)</option>
-                    <option value="ml">ml (밀리리터)</option>
-                    <option value="L">L (리터)</option>
-                    <option value="모">모 (두부)</option>
-                    <option value="쪽">쪽 (마늘)</option>
-                    <option value="봉지">봉지</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-gray-700 block mb-1">보관 위치 *</label>
-                  <select value={formData.storage} onChange={e => setFormData({ ...formData, storage: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-emerald-500 bg-white"><option value="" disabled>선택하세요</option>
-                    <option value="fridge">냉장 보관</option>
-                    <option value="freezer">냉동 보관</option>
-                    <option value="pantry">실온 보관</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="font-bold text-gray-700 block mb-1">기한 구분</label>
-                  <select value={formData.expirationType} onChange={e => setFormData({ ...formData, expirationType: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-emerald-500 bg-white"><option value="" disabled>선택하세요</option>
-                    <option value="expiration">유통기한</option>
-                    <option value="use_by">소비기한</option>
-                    <option value="custom">직접지정 예정일</option>
-                    <option value="unknown">기한 모름/미등록</option>
-                  </select>
-                </div>
-              </div>
-
-              {formData.expirationType !== 'unknown' && (<div>
-                  <label className="font-bold text-gray-700 block mb-1">기한 날짜 (YYYY-MM-DD)</label>
-                  <input type="date" value={formData.expirationDate} onChange={e => setFormData({ ...formData, expirationDate: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-emerald-500 bg-white"/>
-                </div>)}
-
-              <div>
-                <label className="font-bold text-gray-700 block mb-1">
-                  최소 유지 수량 (선택 - 이 수량 밑으로 떨어지면 자동 장바구니 추가)
-                </label>
-                <input type="number" min="0" step="any" value={formData.minStock} onChange={e => setFormData({ ...formData, minStock: Number(e.target.value) })} className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-emerald-500"/>
-              </div>
-
-              <div>
-                <label className="font-bold text-gray-700 block mb-1">메모 (선택)</label>
-                <input type="text" placeholder="예: 마트 세일 구매분, 어제 개봉함" value={formData.memo} onChange={e => setFormData({ ...formData, memo: e.target.value })} className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-emerald-500"/>
-              </div>
-
-              <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
-                <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 min-h-[44px] cursor-pointer">
-                  취소
-                </button>
-                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs min-h-[44px] cursor-pointer" disabled>
-                  {editingLot ? '수정 완료' : '등록하기'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>)}
-
-      {/* Dispose Waste Modal */}
-      {disposingLot && (<div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl">
-            <h3 className="text-base font-bold text-gray-900 mb-2 flex items-center gap-2">
-              🗑️ 식재료 폐기 기록
-            </h3>
-            <p className="text-xs text-gray-500 mb-4">
-              <strong>{disposingLot.ingredientName}</strong> (현재 보유: {disposingLot.quantity}{disposingLot.unit})
-            </p>
-
-            <div className="space-y-3 text-xs mb-5">
-              <div>
-                <label className="font-bold text-gray-700 block mb-1">폐기할 수량 ({disposingLot.unit}):</label>
-                <input type="number" step="any" max={disposingLot.quantity} min="0.1" value={disposeQty} onChange={e => setDisposeQty(Number(e.target.value))} className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-rose-500"/>
-              </div>
-
-              <div>
-                <label className="font-bold text-gray-700 block mb-1">폐기 사유:</label>
-                <select value={disposeReason} onChange={e => setDisposeReason(e.target.value)} className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm bg-white"><option value="" disabled>선택하세요</option>
-                  <option value="기한 경과로 인한 폐기">소비/유통기한 경과</option>
-                  <option value="변질 및 부패">변질 및 냄새/부패</option>
-                  <option value="보관 부주의">보관 부주의 (실온 방치 등)</option>
-                  <option value="기타 손상">기타 파손 및 오염</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setDisposingLot(null)} className="flex-1 py-2 rounded-xl border border-gray-300 text-gray-700 font-semibold min-h-[44px] cursor-pointer">
-                취소
-              </button>
-              <button type="button" className="flex-1 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold min-h-[44px] cursor-pointer" disabled>
-                폐기 확정
-              </button>
-            </div>
-          </div>
-        </div>)}
-
-      {/* History Ledger Modal */}
-      {showHistoryModal && (<div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-xl max-h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-3">
-              <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                📋 수량 변경 원장 이력
-              </h3>
-              <button onClick={() => setShowHistoryModal(false)} className="text-gray-400 p-1 cursor-pointer">
-                <X className="w-5 h-5"/>
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-              {transactions.length === 0 ? (<p className="text-xs text-gray-500 py-10 text-center">기록된 이력이 없습니다.</p>) : (transactions.map(txn => {
-                const typeLabel = {
-                    purchase_in: '입고 (+)',
-                    cook_deduct: '조리 차감 (-)',
-                    cook_restore: '조리 복원 (+)',
-                    manual_adjust: '수동 수정',
-                    dispose: '폐기 (-)'
-                }[txn.type];
-                const isPositive = txn.deltaQuantity > 0;
-                return (<div key={txn.id} className="p-3 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-between text-xs">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-gray-900">{txn.ingredientName}</span>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${txn.type === 'purchase_in' ? 'bg-emerald-100 text-emerald-800' :
-                        txn.type === 'cook_deduct' ? 'bg-blue-100 text-blue-800' :
-                            txn.type === 'dispose' ? 'bg-rose-100 text-rose-800' :
-                                'bg-gray-200 text-gray-800'}`}>
-                            {typeLabel}
-                          </span>
-                        </div>
-                        <p className="text-gray-500 mt-0.5">{txn.reason} ({txn.timestamp.slice(0, 16).replace('T', ' ')})</p>
-                      </div>
-
-                      <span className={`font-mono font-bold text-sm ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {isPositive ? `+${txn.deltaQuantity}` : txn.deltaQuantity} {txn.unit}
-                      </span>
-                    </div>);
-            }))}
-            </div>
-
-            <div className="pt-3 border-t border-gray-100 mt-3 text-right">
-              <button onClick={() => setShowHistoryModal(false)} className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 font-semibold text-xs hover:bg-gray-200 cursor-pointer min-h-[40px]">
-                닫기
-              </button>
-            </div>
-          </div>
-        </div>)}
-    </>);
+              )}
+              <details className="rounded-2xl border border-gray-200 bg-white p-4 md:p-5">
+                <summary className="min-h-11 cursor-pointer content-center text-sm font-semibold text-gray-600">소진·폐기 기록 보기 ({archivedLotCount}개 묶음)</summary>
+                <p className="mt-2 text-xs text-gray-500">현재 검색·보관 필터에 맞는 기록입니다. 기본 재고와 합계에는 포함되지 않습니다.</p>
+                {archivedGroups.length === 0 ? <p className="py-6 text-sm text-gray-500">조건에 맞는 소진·폐기 기록이 없습니다.</p> : (
+                  <div className="mt-4 space-y-4">{archivedGroups.map((group) => (
+                    <section key={JSON.stringify([group.ingredientName, group.unit])} aria-label={`${group.ingredientName} ${group.unit} 소진·폐기 기록`}>
+                      <h3 className="mb-2 break-all text-sm font-bold text-gray-700">{group.ingredientName} <span className="font-normal text-gray-500">({group.unit})</span></h3>
+                      <ul className="space-y-2">{group.lots.map((lot) => <LotCard key={lot.id} lot={lot} inactive onHistory={openHistory} />)}</ul>
+                    </section>
+                  ))}</div>
+                )}
+              </details>
+              <p className="text-xs leading-5 text-gray-500">총수량은 활성 묶음 기준이며, 사용 가능 수량은 기한 경과 재고를 제외합니다. 기한 미등록 재고는 포함하며, 단위가 다른 재료는 따로 표시합니다.</p>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  )
 }
