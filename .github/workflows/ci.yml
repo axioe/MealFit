@@ -61,12 +61,13 @@ jobs:
       - run: npm run lint
       - run: npm run build
 
-  # main에 push되고 backend·frontend가 모두 통과하면 EC2에 배포한다
+  # main에 push되거나 Actions 화면에서 main으로 Run workflow를 누르면,
+  # backend·frontend가 모두 통과한 뒤 EC2에 배포한다
   # 필요한 Secrets: EC2_HOST(서버 IP), EC2_SSH_KEY(.pem 파일 내용)
   deploy:
     name: deploy (EC2)
     needs: [backend, frontend]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
