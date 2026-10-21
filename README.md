@@ -14,6 +14,28 @@
 | 프론트 언어 | React + TypeScript | **React + JavaScript** (`.js` / `.jsx`) |
 | Spring Boot | 3.x | 3.5.16 (Java 21) |
 
+## 현재 구현 상태 (2026-10-21 기준)
+
+시연 흐름 중 **재고 → 식단 추천·확정 → 장보기 → 레시피**는 화면과 API가 연결되어 동작한다. **로그인·프로필, 대시보드 API, 섭취 기록, 조리 화면 연결, Python AI 서비스**가 남아 있다.
+
+| 기능 | 담당 | 백엔드 API | 프론트 화면 | 남은 일 |
+|---|---|---|---|---|
+| 스마트 냉장고 | 김수현 | ✅ | ✅ API 연동 | |
+| AI 식단 추천·재추천·확정·취소 | 박희진·유지훈 | ✅ (현재는 로컬 대체 식단만) | ✅ API 연동 | Python AI 서비스 연결 |
+| 레시피 상세·인분 환산 | 유지훈 | ✅ | ✅ API 연동 | |
+| 자동 장보기 (부족분·부분 구매·입고) | 유지훈 | ✅ | ✅ API 연동 | |
+| 조리 차감·취소 복원 | 유지훈 | ✅ | ⚠️ 버튼만 있음 (비활성) | 레시피 상세 화면에 API 연결 |
+| 대시보드 | 최원석 | ❌ | ⚠️ 식단은 예시 데이터, 임박 재료·부족분은 실제 API | `GET /dashboard` API |
+| 섭취 기록 (먹음/건너뜀) | 최원석 | ❌ (엔티티만) | ⚠️ 예시 데이터 | `POST /intake-logs` API |
+| 로그인·회원가입 | 최원석 | ❌ | ⚠️ 화면만 (버튼 비활성) | 사용자 테이블, 인증, 프론트 연결 |
+| 마이페이지·프로필 | 최원석 | ❌ | ⚠️ 화면만 | `GET/PUT /me/profile`, `UserDietProfileProvider` 구현 |
+| AI 서비스 (Gemini) | 박희진 | ❌ (`MealPlanAiClient` 구현 없음) | - | `ai-service/` 추가, `MealPlanAiClient` 구현 빈 등록 |
+| 운동 루틴 (Phase 1) | 유지훈 | ❌ | ⚠️ 화면만 (예시 데이터) | |
+| 캘린더·체중 (Phase 1) | 최원석 | ❌ | ⚠️ 화면만 (예시 데이터) | |
+
+- 대시보드의 예시 데이터 사용 여부는 `frontend/src/api/dashboard.js`의 `MOCK` 값으로 영역별로 끈다. API가 완성되면 `false`로 바꾼다.
+- `MealPlanAiClient`(AI 호출)와 `UserDietProfileProvider`(프로필 조회)는 인터페이스만 있다. 구현 빈이 없으면 식단 추천은 검증된 로컬 대체 레시피(`V2__seed_fallback_recipes.sql`)로, 프로필은 빈 값으로 동작한다.
+
 ## 폴더 구조
 
 ```
@@ -21,25 +43,28 @@ MealFit/
 ├─ backend/                  Spring Boot (REST API, 도메인 로직, 서버 검증)
 │  └─ src/main/java/com/mealfit/
 │     ├─ global/             공통: exception, config, common(BaseTimeEntity, StatusTransition), web(@CurrentUserId)
-│     └─ domain/
-│        ├─ inventory/       재고 묶음·변경 이력              엔티티/리포지토리만
-│        ├─ shopping/        장보기 부족분                    엔티티/리포지토리만
-│        ├─ recipe/          레시피·재료·조리 순서            엔티티/리포지토리만
-│        ├─ mealplan/        식단(초안→확정→취소)             엔티티/리포지토리만
-│        ├─ cooking/         조리 완료·취소 복원              엔티티/리포지토리만
-│        ├─ intake/          섭취 기록                        엔티티/리포지토리만
+│     └─ domain/             도메인별로 엔티티·Repository·Service·Controller·dto를 한 폴더에 둔다
+│        ├─ inventory/       재고 묶음·변경 이력                    ✅
+│        ├─ mealplan/        식단 추천·확정·취소, AI 제안 검증, 로컬 대체 ✅
+│        ├─ recipe/          레시피 상세, 수량·단위 환산(Quantity)    ✅
+│        ├─ shopping/        장보기 부족분·부분 구매·입고             ✅
+│        ├─ cooking/         조리 미리보기·완료·취소 복원             ✅
+│        ├─ intake/          섭취 기록                               엔티티만
 │        └─ ai/              Python AI 서비스 호출용 RestClient 설정
 │        (auth/, user/       로그인·회원가입·프로필 — 최원석 담당, 아직 없음)
+├─ backend/src/main/resources/db/migration/   V1 스키마, V2 로컬 대체 레시피
 ├─ frontend/                 React + JavaScript + Vite
-│  └─ src/
-│     ├─ api/                axios 클라이언트, 도메인별 API + TanStack Query 훅
-│     ├─ components/layout/  좌측 메뉴(데스크톱) / 하단 메뉴(모바일) / 헤더
-│     ├─ components/common/  상태 배지, 태그 입력, 스피너, 작업 안내 화면
-│     ├─ pages/              화면 (모두 담당자 안내 화면 상태)
-│     ├─ routes/             라우터
-│     └─ lib/                백엔드 enum 상수(enums.js), 한글 라벨(labels.js)
+│  ├─ src/
+│  │  ├─ api/                client.js(axios), 도메인별 API + TanStack Query 훅, mocks/(예시 데이터)
+│  │  ├─ components/layout/  좌측 메뉴(데스크톱) / 하단 메뉴(모바일) / 헤더
+│  │  ├─ components/common/  상태 배지, 재고 입고·수정 대화상자, 재고 이력, 태그 입력, 스피너
+│  │  ├─ pages/              Dashboard, Recommend, RecipeDetail, Fridge, Shopping, Workout, Calendar, Weight, MyPage, Login, Signup
+│  │  ├─ routes/             라우터 (페이지별 지연 로딩)
+│  │  └─ lib/                enums.js, labels.js, 날짜·기한·숫자 형식 도우미
+│  └─ tests/                 Node 기본 테스트 (*.test.mjs)
 ├─ docker-compose.yml        로컬 MariaDB
-└─ .env.example
+├─ docker-compose.prod.yml   운영(EC2) 구성
+└─ .env.example, .env.prod.example
 ```
 
 Python AI 서비스(`ai-service/`)는 담당자가 이 저장소에 추가한다.
@@ -60,7 +85,9 @@ cd frontend && npm install && npm run dev   # http://localhost:5173
 - **Swagger:** http://localhost:8080/swagger-ui.html
 - 로그인 기능 완성 전까지 API는 로그인 없이 호출된다. 사용자는 `X-User-Id` 헤더로 지정하고, 없으면 1번 사용자로 처리한다.
 - 프론트는 `/api` 요청을 Vite 프록시로 8080에 넘기므로 CORS 설정이 필요 없다.
-- 테스트: `cd backend && ./gradlew test` (H2 메모리 DB) / `cd frontend && npm run build`
+- 테스트
+  - 백엔드: `cd backend && ./gradlew test` (H2 메모리 DB)
+  - 프론트: `cd frontend && npm run lint && npm run build`, 로직 테스트는 `node --test tests/*.test.mjs`
 
 ## 배포 (AWS EC2)
 
@@ -130,28 +157,33 @@ cd ~/MealFit && git pull && docker compose -f docker-compose.prod.yml up -d --bu
 
 > 로그인 담당자가 할 연결 작업: 사용자 테이블을 새 마이그레이션으로 추가하면서 기존 테이블 `user_id`에 외래키 연결, `global/web/CurrentUserIdArgumentResolver`를 인증 정보 기반으로 교체, 프론트 `api/client.js`에 토큰 처리 추가, 라우터에 로그인 가드 추가.
 
-각 페이지의 안내 화면(`PagePlaceholder`)에 구현할 것과 연동 API가 적혀 있다. 구현을 시작하면 안내 화면을 지우고 만든다.
-
 ## API
 
-브라우저는 Spring `/api/v1/**`만 호출한다. Spring이 내부망으로 Python AI 서비스 `/ai/**`를 부른다.
+브라우저는 Spring `/api/v1/**`만 호출한다. Spring이 내부망으로 Python AI 서비스 `/ai/**`를 부른다. 요청·응답 형식은 Swagger(로컬)에서 본다.
 
-| 상태 | Method | Endpoint | 설명 |
-|---|---|---|---|
-| | POST | `/api/v1/auth/signup`, `/login` | 회원가입, 로그인 |
-| | GET/PUT | `/api/v1/me/profile` | 목표·알레르기·조리 시간(10/20/30)·예산·제외 재료 |
-| | GET | `/api/v1/dashboard?date=` | 오늘의 식단, 기한 임박 재료, 부족분 |
-| | GET/POST | `/api/v1/inventory/lots` | 재고 묶음 조회(재료별 합계), 입고 |
-| | PATCH | `/api/v1/inventory/lots/{id}` | 수동 조정, 폐기 (이력 자동 기록) |
-| | POST | `/api/v1/meal-plans/recommend` | AI 3끼 추천 (초안) |
-| | POST | `/api/v1/meal-plans/{id}/regenerate` | 한 끼 재추천 |
-| | POST | `/api/v1/meal-plans/{id}/confirm` | 서버 검증 후 확정, 부족분 계산 |
-| | GET | `/api/v1/recipes/{id}?servings=` | 레시피 상세, 인분 환산 |
-| | GET/PATCH | `/api/v1/shopping-items` | 부족분 목록, 부분 구매 |
-| | POST | `/api/v1/shopping-items/stock-in` | 구매분 냉장고 입고 |
-| | GET | `/api/v1/cooking/preview?mealPlanId=` | 차감 미리보기 |
-| | POST | `/api/v1/cooking-events`, `/{id}/cancel` | 조리 완료(차감), 취소(복원) |
-| | POST | `/api/v1/intake-logs` | 먹음/건너뜀 기록 |
+| 상태 | 담당 | Method | Endpoint | 설명 |
+|---|---|---|---|---|
+| ✅ | 김수현 | GET | `/api/v1/inventory/lots` | 재료별 합계와 재고 묶음 조회 |
+| ✅ | 김수현 | POST | `/api/v1/inventory/lots` | 재고 묶음 입고 |
+| ✅ | 김수현 | PATCH | `/api/v1/inventory/lots/{id}` | 수량·정보 조정, 부분·전량 폐기 (이력 자동 기록) |
+| ✅ | 김수현 | GET | `/api/v1/inventory/transactions?lotId=` | 재고 변경 이력 |
+| ✅ | 유지훈 | GET | `/api/v1/meal-plans?date=` | 날짜별 식단 (취소 제외, date 없으면 오늘) |
+| ✅ | 박희진·유지훈 | POST | `/api/v1/meal-plans/recommend` | 하루 세 끼 추천 초안 (같은 날짜면 전체 재추천) |
+| ✅ | 박희진·유지훈 | POST | `/api/v1/meal-plans/{id}/regenerate` | 한 끼 재추천 (초안만) |
+| ✅ | 유지훈 | POST | `/api/v1/meal-plans/{id}/confirm` | 서버 검증 후 확정, 장보기 부족분 계산 |
+| ✅ | 유지훈 | POST | `/api/v1/meal-plans/{id}/cancel` | 식단 취소 (확정 식단이면 부족분 재계산) |
+| ✅ | 유지훈 | GET | `/api/v1/recipes/{id}?servings=` | 레시피 상세, 인분 환산 |
+| ✅ | 유지훈 | GET | `/api/v1/shopping-items` | 장보기 부족분 (조회 시 현재 재고로 다시 계산) |
+| ✅ | 유지훈 | PATCH | `/api/v1/shopping-items` | 부분 구매 반영 |
+| ✅ | 유지훈 | POST | `/api/v1/shopping-items/stock-in` | 구매분 냉장고 입고 |
+| ✅ | 유지훈 | GET | `/api/v1/cooking/preview?mealPlanId=` | 조리 차감 미리보기 |
+| ✅ | 유지훈 | POST | `/api/v1/cooking-events` | 조리 완료 (확정 식단만, 재고 차감) |
+| ✅ | 유지훈 | POST | `/api/v1/cooking-events/{id}/cancel` | 조리 취소 (차감한 묶음에 원래 수량 복원) |
+| ❌ | 최원석 | POST | `/api/v1/auth/signup`, `/login` | 회원가입, 로그인 |
+| ❌ | 최원석 | GET/PUT | `/api/v1/me/profile` | 목표·알레르기·조리 시간(10/20/30)·예산·제외 재료 |
+| ❌ | 최원석 | GET | `/api/v1/dashboard?date=` | 오늘의 식단, 기한 임박 재료, 부족분 |
+| ❌ | 최원석 | POST | `/api/v1/intake-logs` | 먹음/건너뜀 기록 |
+| ❌ | 박희진 | POST | `/ai/meal-plans` (내부) | Python → Gemini 호출, JSON 반환 |
 
 ## 개발 규칙
 
