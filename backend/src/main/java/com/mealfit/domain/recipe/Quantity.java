@@ -69,6 +69,16 @@ public record Quantity(BigDecimal amount, String unit) {
         return new Quantity(amount.multiply(conversion.factor()), conversion.baseUnit());
     }
 
+    /** 같은 계열 단위로 바꾼다 (예: 300g → 0.3kg). 계열이 다르면(예: g → 개) 예외를 던진다. */
+    public Quantity convertTo(String targetUnit) {
+        Quantity base = toBaseUnit();
+        Quantity targetOne = Quantity.of(BigDecimal.ONE, targetUnit).toBaseUnit();
+        if (!base.unit().equals(targetOne.unit())) {
+            throw new IllegalArgumentException("단위 계열이 달라 바꿀 수 없습니다: " + unit + " → " + targetUnit);
+        }
+        return new Quantity(base.amount().divide(targetOne.amount(), SCALE, RoundingMode.HALF_UP), targetUnit);
+    }
+
     /** 기본 단위로 바꿨을 때 단위가 같으면 더할 수 있다 (예: 1kg + 200g, 2개 + 1개). */
     public boolean isSummableWith(Quantity other) {
         return toBaseUnit().unit().equals(other.toBaseUnit().unit());

@@ -50,6 +50,13 @@ public enum ErrorCode {
     SHOPPING_STOCK_IN_EXCEEDED(HttpStatus.CONFLICT, "SHOPPING_003", "구매한 수량보다 많이 입고할 수 없습니다."),
     SHOPPING_DUPLICATE_ITEM(HttpStatus.BAD_REQUEST, "SHOPPING_004", "같은 장보기 항목을 한 번에 여러 번 보낼 수 없습니다."),
 
+    // 조리
+    COOKING_EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, "COOKING_001", "조리 기록을 찾을 수 없습니다."),
+    COOKING_NOT_CONFIRMED(HttpStatus.CONFLICT, "COOKING_002", "확정된 식단만 조리할 수 있습니다."),
+    COOKING_ALREADY_COOKED(HttpStatus.CONFLICT, "COOKING_003", "이미 조리 완료한 식단입니다."),
+    COOKING_INSUFFICIENT_STOCK(HttpStatus.CONFLICT, "COOKING_004", "재고가 부족해 조리할 수 없습니다."),
+    COOKING_ALREADY_RESTORED(HttpStatus.CONFLICT, "COOKING_005", "이미 취소한 조리입니다."),
+
     // AI 서비스
     AI_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI_001", "AI 서비스에 연결할 수 없습니다.");
 
