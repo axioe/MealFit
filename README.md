@@ -197,3 +197,5 @@ cd ~/MealFit && git pull && docker compose -f docker-compose.prod.yml up -d --bu
 - Spring은 `domain/ai/AiClientConfig`의 `aiRestClient`로 호출한다 (연결 3초, 응답 20초 타임아웃)
 - AI 결과는 항상 초안이다. Spring이 알레르기·제외 재료·수량을 다시 검사한 뒤 확정 가능 상태로 만든다
 - 실패/타임아웃 시 로컬 대체 식단을 쓰고 `RecipeSource.LOCAL_FALLBACK`으로 화면에 표기
+
+Test입니다.
