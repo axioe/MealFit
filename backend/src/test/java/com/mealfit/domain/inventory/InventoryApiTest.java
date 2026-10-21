@@ -3,6 +3,15 @@ package com.mealfit.domain.inventory;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
+import com.mealfit.domain.inventory.dto.UpdateLotRequest;
+import com.mealfit.global.exception.BusinessException;
+import jakarta.persistence.EntityManager;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -44,6 +53,11 @@ class InventoryApiTest {
     private InventoryLotRepository lotRepository;
     @MockitoSpyBean
     private InventoryTransactionRepository transactionRepository;
+
+    @Autowired
+    private InventoryService inventoryService;
+    @Autowired
+    private EntityManager entityManager;
 
     @BeforeEach
     void cleanInventory() {
@@ -380,6 +394,154 @@ class InventoryApiTest {
         assertThat(lot.getMinStockQty()).isEqualByComparingTo(request.has("minStockQty") ? "0" : "10");
         assertThat(lot.getMemo()).isEqualTo(request.has("memo") ? "" : "기존 메모");
         assertThat(transactionRepository.count()).isEqualTo(1);
+    }
+
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0.0001", "1000000000", "-0.001"})
+    void invalidDisposalPrecisionAndRangePreserveInventory(String quantity) throws Exception {
+        long id = createLot(1, "경계값", "100", "g", null);
+        JsonNode before = read(mockMvc.perform(get(LOTS)));
+        update(1, id, "{\"action\":\"DISPOSE\",\"quantity\":" + quantity + "}")
+                .andExpect(status().isBadRequest());
+        assertThat(read(mockMvc.perform(get(LOTS)))).isEqualTo(before);
+        assertThat(transactionRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    void unchangedAdjustmentDoesNotChangeInventoryOrHistory() throws Exception {
+        long id = createLot(1, "경계값", "100", "g", null);
+        JsonNode before = read(mockMvc.perform(get(LOTS)));
+        update(1, id, """
+                {"action":"ADJUST","quantity":100,"storageLocation":"FRIDGE","minStockQty":0}
+                """).andExpect(status().isOk());
+        assertThat(read(mockMvc.perform(get(LOTS)))).isEqualTo(before);
+        assertThat(transactionRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    void smallestQuantitySurvivesAdjustmentAndFullDisposal() throws Exception {
+        long id = createLot(1, "경계값", "0.001", "g", null);
+        update(1, id, """
+                {"action":"ADJUST","quantity":0.003}
+                """).andExpect(status().isOk());
+        update(1, id, """
+                {"action":"DISPOSE","quantity":0.002}
+                """).andExpect(status().isOk()).andExpect(jsonPath("$.quantity").value(0.001));
+        update(1, id, """
+                {"action":"DISPOSE","quantity":0.001}
+                """).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("DISPOSED"));
+        assertHistoryBalance(id, "0");
+    }
+
+    @Test
+    void disposalCannotAccessForeignOrMissingLots() throws Exception {
+        long other = createLot(2, "다른 사용자", "100", "g", null);
+        for (long id : new long[]{other, Long.MAX_VALUE}) {
+            update(1, id, """
+                    {"action":"DISPOSE","quantity":1}
+                    """).andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.code").value("INVENTORY_001"));
+        }
+        assertThat(lotRepository.findById(other).orElseThrow().getQuantity()).isEqualByComparingTo("100");
+        assertThat(transactionRepository.count()).isEqualTo(1);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ADJUST", "DISPOSE"})
+    void flushedLotAndHistoryRollBackTogether(String action) throws Exception {
+        long id = createLot(1, "롤백 검증", "100", "g", LocalDate.of(2027, 1, 1));
+        JsonNode before = read(mockMvc.perform(get(LOTS)));
+        JsonNode history = read(mockMvc.perform(get(TRANSACTIONS)));
+        // SQL 반영 이후 실패해도 재고와 이력을 함께 되돌린다.
+        doAnswer(invocation -> {
+            entityManager.persist(invocation.getArgument(0, InventoryTransaction.class));
+            entityManager.flush();
+            throw new IllegalStateException("SQL 반영 후 실패");
+        }).when(transactionRepository).save(any(InventoryTransaction.class));
+        String body = action.equals("ADJUST")
+                ? """
+                  {"action":"ADJUST","quantity":0,"storageLocation":"FREEZER",
+                   "clearExpiryDate":true,"minStockQty":0,"memo":"실패할 수정"}
+                  """
+                : """
+                  {"action":"DISPOSE","quantity":100,"memo":"실패할 폐기"}
+                  """;
+        update(1, id, body).andExpect(status().isInternalServerError());
+        assertThat(read(mockMvc.perform(get(LOTS)))).isEqualTo(before);
+        assertThat(read(mockMvc.perform(get(TRANSACTIONS)))).isEqualTo(history);
+    }
+
+    @Test
+    void concurrentExcessDisposalOnlyAllowsOneRequest() throws Exception {
+        long id = createLot(1, "동시 폐기", "100", "g", null);
+        List<Boolean> results = concurrentUpdates(id, InventoryAction.DISPOSE, "60", "60");
+        assertThat(results).containsExactlyInAnyOrder(true, false);
+        assertThat(lotRepository.findById(id).orElseThrow().getQuantity()).isEqualByComparingTo("40");
+        assertThat(transactionRepository.count()).isEqualTo(2);
+        assertHistoryBalance(id, "40");
+    }
+
+    @Test
+    void concurrentPartialDisposalsBecomeFullDisposal() throws Exception {
+        long id = createLot(1, "동시 폐기", "100", "g", null);
+        assertThat(concurrentUpdates(id, InventoryAction.DISPOSE, "50", "50"))
+                .containsExactly(true, true);
+        assertThat(lotRepository.findById(id).orElseThrow().getStatus()).isEqualTo(LotStatus.DISPOSED);
+        assertThat(transactionRepository.count()).isEqualTo(3);
+        assertHistoryBalance(id, "0");
+    }
+
+    @Test
+    void concurrentAbsoluteAdjustmentsKeepHistoryConsistent() throws Exception {
+        long id = createLot(1, "동시 수정", "100", "g", null);
+        assertThat(concurrentUpdates(id, InventoryAction.ADJUST, "80", "60"))
+                .containsExactly(true, true);
+        BigDecimal quantity = lotRepository.findById(id).orElseThrow().getQuantity();
+        assertThat(quantity).isIn(new BigDecimal("80.000"), new BigDecimal("60.000"));
+        assertThat(transactionRepository.count()).isEqualTo(3);
+        assertHistoryBalance(id, quantity.toPlainString());
+    }
+
+    private List<Boolean> concurrentUpdates(long id, InventoryAction action, String first, String second)
+            throws Exception {
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            Callable<Boolean> left = concurrentUpdate(id, action, first, ready, start);
+            Callable<Boolean> right = concurrentUpdate(id, action, second, ready, start);
+            var leftResult = executor.submit(left);
+            var rightResult = executor.submit(right);
+            try {
+                assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            } finally {
+                start.countDown();
+            }
+            return List.of(leftResult.get(10, TimeUnit.SECONDS), rightResult.get(10, TimeUnit.SECONDS));
+        }
+    }
+
+    private Callable<Boolean> concurrentUpdate(long id, InventoryAction action, String quantity,
+                                               CountDownLatch ready, CountDownLatch start) {
+        return () -> {
+            ready.countDown();
+            if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("동시 요청 대기 초과");
+            try {
+                inventoryService.update(1L, id, new UpdateLotRequest(action, new BigDecimal(quantity),
+                        null, null, null, null, null));
+                return true;
+            } catch (BusinessException exception) {
+                assertThat(exception.getMessage()).contains("현재 재고보다");
+                return false;
+            }
+        };
+    }
+
+    private void assertHistoryBalance(long id, String expected) {
+        BigDecimal balance = transactionRepository.findByLotIdOrderByCreatedAtDesc(id).stream()
+                .map(InventoryTransaction::getQtyChange).reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(balance).isEqualByComparingTo(expected);
+        assertThat(lotRepository.findById(id).orElseThrow().getQuantity()).isEqualByComparingTo(expected);
     }
 
     private long createLot(long userId, String name, String quantity, String unit, LocalDate expiry) throws Exception {

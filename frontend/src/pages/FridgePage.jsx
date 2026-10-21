@@ -1,7 +1,9 @@
 import { useId, useState } from 'react'
-import { Archive, ChevronDown, Package, Plus, Refrigerator, RefreshCw, Search, Snowflake, TriangleAlert, X } from 'lucide-react'
+import { Archive, ChevronDown, History, Package, Plus, Refrigerator, RefreshCw, Search, Snowflake, TriangleAlert, X } from 'lucide-react'
 import { getErrorMessage } from '@/api/client'
 import { useInventory } from '@/api/inventory'
+import { InventoryHistoryPanel } from '@/components/common/InventoryHistoryPanel'
+import { InventoryLotDialog } from '@/components/common/InventoryLotDialog'
 import { StockInDialog } from '@/components/common/StockInDialog'
 import { Spinner } from '@/components/common/Spinner'
 import { ExpirationBadge } from '@/components/common/StatusBadge'
@@ -38,11 +40,11 @@ function summarizeLots(lots) {
   return { totalQuantity: total / 1000, availableQuantity: (total - expired) / 1000, expiredQuantity: expired / 1000 }
 }
 
-function LotCard({ lot, inactive = false }) {
+function LotCard({ lot, inactive = false, onEdit, onDispose, onHistory }) {
   return (
     <li className={`min-w-0 rounded-xl border p-4 ${inactive ? 'border-gray-200 bg-gray-100/70' : 'border-gray-200 bg-white'}`}>
       <div className="flex flex-wrap items-center gap-2">
-        <span className={`text-base font-bold ${inactive ? 'text-gray-500' : 'text-gray-900'}`}>
+        <span className={`min-w-0 break-all text-base font-bold ${inactive ? 'text-gray-500' : 'text-gray-900'}`}>
           {formatQuantity(lot.quantity, lot.unit)}
         </span>
         <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
@@ -61,7 +63,7 @@ function LotCard({ lot, inactive = false }) {
         </div>
         <div className="flex items-center gap-2">
           <dt>최소 유지량</dt>
-          <dd className="text-gray-700">{formatQuantity(lot.minStockQty, lot.unit)}</dd>
+          <dd className="min-w-0 break-all text-gray-700">{formatQuantity(lot.minStockQty, lot.unit)}</dd>
         </div>
         <div className="flex items-center gap-2">
           <dt>묶음 번호</dt>
@@ -74,11 +76,18 @@ function LotCard({ lot, inactive = false }) {
           </div>
         )}
       </dl>
+      <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-100 pt-3">
+        {!inactive && lot.status === LOT_STATUS.ACTIVE && <>
+          <button type="button" onClick={() => onEdit(lot)} className="btn-secondary min-h-11 text-xs">수정</button>
+          <button type="button" onClick={() => onDispose(lot)} className="min-h-11 cursor-pointer rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs font-semibold text-rose-700 hover:bg-rose-100">폐기</button>
+        </>}
+        <button type="button" onClick={() => onHistory(lot.id)} className="btn-secondary min-h-11 text-xs">이 묶음 이력</button>
+      </div>
     </li>
   )
 }
 
-function InventoryGroup({ group }) {
+function InventoryGroup({ group, onEdit, onDispose, onHistory }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const panelId = useId()
   const activeLots = group.lots.filter((lot) => lot.status === LOT_STATUS.ACTIVE)
@@ -103,7 +112,7 @@ function InventoryGroup({ group }) {
           <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
               <span className="break-all text-base font-bold text-gray-900">{group.ingredientName}</span>
-              <span className="text-sm font-semibold text-gray-700">총 {formatQuantity(group.totalQuantity, group.unit)}</span>
+              <span className="min-w-0 break-all text-sm font-semibold text-gray-700">총 {formatQuantity(group.totalQuantity, group.unit)}</span>
             </span>
             <span className="mt-1 block text-xs font-normal leading-5 text-gray-500">
               {activeLots.length ? `보관 중 ${activeLots.length}개 묶음` : '활성 재고 없음'}
@@ -133,7 +142,7 @@ function InventoryGroup({ group }) {
         {usableLots.length > 0 && (
           <section aria-label="보관 중인 묶음">
             <h4 className="mb-2 text-xs font-bold text-gray-700">보관 중인 묶음</h4>
-            <ul className="space-y-2">{usableLots.map((lot) => <LotCard key={lot.id} lot={lot} />)}</ul>
+            <ul className="space-y-2">{usableLots.map((lot) => <LotCard key={lot.id} lot={lot} onEdit={onEdit} onDispose={onDispose} onHistory={onHistory} />)}</ul>
           </section>
         )}
         {expiredLots.length > 0 && (
@@ -142,7 +151,7 @@ function InventoryGroup({ group }) {
               <TriangleAlert aria-hidden="true" className="h-4 w-4" />소비기한이 지난 묶음
             </h4>
             <p className="mb-2 text-xs text-rose-700">사용 가능 수량에서 제외된 재고입니다.</p>
-            <ul className="space-y-2">{expiredLots.map((lot) => <LotCard key={lot.id} lot={lot} />)}</ul>
+            <ul className="space-y-2">{expiredLots.map((lot) => <LotCard key={lot.id} lot={lot} onEdit={onEdit} onDispose={onDispose} onHistory={onHistory} />)}</ul>
           </section>
         )}
       </div>
@@ -153,10 +162,14 @@ function InventoryGroup({ group }) {
 export function FridgePage() {
   const { data, isPending, isError, error, isFetching, refetch } = useInventory()
   const [showStockIn, setShowStockIn] = useState(false)
+  const [lotAction, setLotAction] = useState(null)
+  const [showHistory, setShowHistory] = useState(false)
+  const [historyLotId, setHistoryLotId] = useState(null)
   const [successMessage, setSuccessMessage] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [storageFilter, setStorageFilter] = useState(ALL_STORAGE)
   const groups = data?.groups ?? []
+  const allLots = groups.flatMap((group) => group.lots)
   const search = searchQuery.trim().toLocaleLowerCase('ko-KR')
   const filteredGroups = groups
     .filter((group) => group.ingredientName.toLocaleLowerCase('ko-KR').includes(search))
@@ -183,6 +196,21 @@ export function FridgePage() {
   const hasFilters = searchQuery !== '' || storageFilter !== ALL_STORAGE
   const hasAnyActiveLots = groups.some((group) => group.lots.some((lot) => lot.status === LOT_STATUS.ACTIVE))
 
+  function openEdit(lot) {
+    setSuccessMessage('')
+    setLotAction({ lot, mode: 'adjust' })
+  }
+
+  function openDispose(lot) {
+    setSuccessMessage('')
+    setLotAction({ lot, mode: 'dispose' })
+  }
+
+  function openHistory(lotId = null) {
+    setHistoryLotId(lotId)
+    setShowHistory(true)
+  }
+
   function resetFilters() {
     setSearchQuery('')
     setStorageFilter(ALL_STORAGE)
@@ -193,6 +221,7 @@ export function FridgePage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm leading-6 text-gray-600">재료별 수량과 소비기한을 한눈에 확인해 보세요.</p>
         <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => openHistory()} className="btn-secondary min-h-11 text-xs"><History aria-hidden="true" className="h-4 w-4" />재고 변경 이력</button>
         <button type="button" onClick={() => refetch()} disabled={isFetching} className="btn-secondary min-h-11 text-xs">
           <RefreshCw aria-hidden="true" className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
           {isFetching ? '불러오는 중...' : '새로고침'}
@@ -203,6 +232,15 @@ export function FridgePage() {
         </div>
       </div>
       {successMessage && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{successMessage}</p>}
+      {lotAction && <InventoryLotDialog key={`${lotAction.mode}-${lotAction.lot.id}`} lot={lotAction.lot} mode={lotAction.mode}
+        onClose={() => setLotAction(null)}
+        onSuccess={(lot, disposed) => {
+          setLotAction(null)
+          setSuccessMessage(disposed
+            ? `${lot.ingredientName} 폐기가 처리되었습니다. 남은 수량은 ${formatQuantity(lot.quantity, lot.unit)}입니다.`
+            : `${lot.ingredientName} 묶음 #${lot.id} 정보가 저장되었습니다.`)
+        }} />}
+      {showHistory && <InventoryHistoryPanel lotId={historyLotId} lots={allLots} onSelectLot={setHistoryLotId} onClose={() => setShowHistory(false)} />}
       {showStockIn && <StockInDialog onClose={() => setShowStockIn(false)} onSuccess={(lot) => {
         setShowStockIn(false)
         resetFilters()
@@ -276,7 +314,7 @@ export function FridgePage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {visibleGroups.map((group) => <InventoryGroup key={JSON.stringify([group.ingredientName, group.unit])} group={group} />)}
+                  {visibleGroups.map((group) => <InventoryGroup key={JSON.stringify([group.ingredientName, group.unit])} group={group} onEdit={openEdit} onDispose={openDispose} onHistory={openHistory} />)}
                 </div>
               )}
               <details className="rounded-2xl border border-gray-200 bg-white p-4 md:p-5">
@@ -286,7 +324,7 @@ export function FridgePage() {
                   <div className="mt-4 space-y-4">{archivedGroups.map((group) => (
                     <section key={JSON.stringify([group.ingredientName, group.unit])} aria-label={`${group.ingredientName} ${group.unit} 소진·폐기 기록`}>
                       <h3 className="mb-2 break-all text-sm font-bold text-gray-700">{group.ingredientName} <span className="font-normal text-gray-500">({group.unit})</span></h3>
-                      <ul className="space-y-2">{group.lots.map((lot) => <LotCard key={lot.id} lot={lot} inactive />)}</ul>
+                      <ul className="space-y-2">{group.lots.map((lot) => <LotCard key={lot.id} lot={lot} inactive onHistory={openHistory} />)}</ul>
                     </section>
                   ))}</div>
                 )}
