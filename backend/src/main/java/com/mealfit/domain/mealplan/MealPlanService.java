@@ -20,6 +20,7 @@ import com.mealfit.domain.shopping.dto.ShoppingItemResponse;
 import com.mealfit.global.exception.BusinessException;
 import com.mealfit.global.exception.ErrorCode;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -49,6 +50,8 @@ public class MealPlanService {
     /** 반복 최소화에 쓰는 최근 식단 기간 (D10 확정 전 임시값) */
     private static final int RECENT_DAYS = 7;
     private static final int MAX_TEXT_LENGTH = 500;
+    /** 서버 시간대(EC2는 UTC)와 상관없이 한국 날짜로 계산한다. 냉장고 도메인과 같은 기준 */
+    private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
 
     private final MealPlanRepository mealPlanRepository;
     private final RecipeRepository recipeRepository;
@@ -140,7 +143,7 @@ public class MealPlanService {
         }
 
         plan.confirm();
-        List<ShoppingItemResponse> shortages = shoppingListService.recalculate(userId, LocalDate.now()).stream()
+        List<ShoppingItemResponse> shortages = shoppingListService.recalculate(userId, LocalDate.now(ZONE)).stream()
                 .filter(item -> ingredientNames.contains(item.getIngredientName()))
                 .filter(item -> item.remainingQty().signum() > 0)
                 .map(ShoppingItemResponse::from)
@@ -161,7 +164,7 @@ public class MealPlanService {
         boolean wasConfirmed = plan.getStatus() == MealPlanStatus.CONFIRMED;
         plan.cancel();
         if (wasConfirmed) {
-            shoppingListService.recalculate(userId, LocalDate.now());
+            shoppingListService.recalculate(userId, LocalDate.now(ZONE));
         }
         return MealPlanResponse.from(plan);
     }
@@ -205,7 +208,7 @@ public class MealPlanService {
      */
     private List<MealPlan> generate(Long userId, LocalDate planDate, List<MealType> targets, int servings,
                                     List<MealPlan> keptPlans, Set<String> previousNames) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(ZONE);
         UserDietProfile profile = profileOf(userId);
         List<InventoryLot> availableLots = inventoryLotRepository
                 .findByUserIdAndStatusOrderByExpiryDateAsc(userId, LotStatus.ACTIVE).stream()
