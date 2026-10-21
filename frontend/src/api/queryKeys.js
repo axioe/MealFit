@@ -7,6 +7,10 @@ export const queryKeys = {
   dashboard: {
     all: ['dashboard'],
     byDate: (date) => ['dashboard', date],
+    profile: ['dashboard', 'profile'],
+    workout: (date) => ['dashboard', 'workout', date],
+    weight: ['dashboard', 'weight'],
+    coaching: ['dashboard', 'coaching'],
   },
   inventory: {
     all: ['inventory'],
