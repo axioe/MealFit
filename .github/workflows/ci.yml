@@ -4,10 +4,22 @@ on:
   push:
     branches: [main, develop]
   pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+# 같은 브랜치/PR에 새로 push하면 이전 실행은 취소한다
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   backend:
+    name: backend (test)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: backend
@@ -18,11 +30,23 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
+      # Windows에서 커밋하면 실행 권한이 빠질 수 있다
+      - name: Make gradlew executable
+        run: chmod +x gradlew
       - name: Test
         run: ./gradlew test --no-daemon
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-report
+          path: backend/build/reports/tests/test
+          retention-days: 7
 
   frontend:
+    name: frontend (lint, build)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: frontend

@@ -1,0 +1,70 @@
+# 운영(EC2) 배포용. 로컬 개발은 docker-compose.yml(DB만)을 쓴다.
+# 실행: cp .env.prod.example .env (값 채우기) → docker compose -f docker-compose.prod.yml up -d --build
+# 외부에 열리는 포트는 80(frontend)뿐이다. backend(8080)·ai-service(8000)는 내부 네트워크에서만 통신한다.
+services:
+  mariadb:
+    image: mariadb:11.4
+    container_name: mealfit-mariadb
+    restart: always
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD를 .env에 설정하세요}
+      MARIADB_ROOT_HOST: localhost # root는 컨테이너 안에서만
+      MARIADB_DATABASE: ${DB_NAME:-mealfit}
+      MARIADB_USER: ${DB_USERNAME:-mealfit}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD를 .env에 설정하세요}
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    # 기본은 서버 내부(127.0.0.1)에서만. DBeaver 직접 접속이 필요하면 .env에 DB_BIND=0.0.0.0
+    # (그때는 반드시 EC2 보안 그룹에서 3306을 팀원 IP만 허용)
+    ports:
+      - "${DB_BIND:-127.0.0.1}:3306:3306"
+    volumes:
+      - mealfit-db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build: ./backend
+    container_name: mealfit-backend
+    restart: always
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-mealfit}
+      DB_USERNAME: ${DB_USERNAME:-mealfit}
+      DB_PASSWORD: ${DB_PASSWORD}
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai-service:8000}
+      TZ: Asia/Seoul
+    expose:
+      - "8080"
+
+  frontend:
+    build: ./frontend
+    container_name: mealfit-frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+  # TODO(AI 담당): ai-service/가 추가되면 아래 주석을 풀고 Dockerfile을 맞춘다.
+  # ai-service:
+  #   build: ./ai-service
+  #   container_name: mealfit-ai
+  #   restart: always
+  #   environment:
+  #     GEMINI_API_KEY: ${GEMINI_API_KEY}
+  #   expose:
+  #     - "8000"
+
+volumes:
+  mealfit-db:

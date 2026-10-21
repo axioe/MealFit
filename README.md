@@ -62,6 +62,37 @@ cd frontend && npm install && npm run dev   # http://localhost:5173
 - 프론트는 `/api` 요청을 Vite 프록시로 8080에 넘기므로 CORS 설정이 필요 없다.
 - 테스트: `cd backend && ./gradlew test` (H2 메모리 DB) / `cd frontend && npm run build`
 
+## 배포 (AWS EC2)
+
+EC2 한 대에서 Docker Compose로 frontend(nginx) · backend(Spring) · MariaDB를 함께 띄운다. 외부에 열리는 포트는 80뿐이고, nginx가 `/api`를 Spring으로 넘긴다.
+
+```
+브라우저 ──80──▶ frontend(nginx) ──/api──▶ backend(:8080) ──▶ mariadb(:3306)
+                                                     └──────▶ ai-service(:8000, 추가 예정)
+```
+
+- 파일: `docker-compose.prod.yml`, `backend/Dockerfile`, `frontend/Dockerfile`, `frontend/nginx.conf`, `.env.prod.example`, `application-prod.yml`
+- EC2: Ubuntu 24.04, t3.small, 서울 리전, 탄력적 IP 연결
+- 보안 그룹: 22(관리자 IP만), 80(전체). 8080·8000은 열지 않는다. 3306은 DBeaver 직접 접속이 필요할 때만 팀원 IP로 연다
+
+**최초 1회 (서버에서)**
+```bash
+sudo apt update && sudo apt install -y docker.io docker-compose-v2 git
+sudo usermod -aG docker ubuntu   # 다시 접속해야 적용
+git clone https://github.com/axioe/MealFit.git && cd MealFit
+cp .env.prod.example .env        # DB_PASSWORD, DB_ROOT_PASSWORD 채우기
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+**다시 배포 (`main`에 머지된 코드만)**
+```bash
+cd ~/MealFit && git pull && docker compose -f docker-compose.prod.yml up -d --build
+```
+
+- 로그: `docker compose -f docker-compose.prod.yml logs -f backend`
+- 운영에서는 Swagger를 끈다(`application-prod.yml`). API 확인은 로컬에서 한다
+- DB 접속(DBeaver): 기본은 SSH 터널(SSH 탭에 EC2 주소·`ubuntu`·키 파일, Main 탭 Host는 `localhost`)
+
 ## 담당 영역
 
 | 담당 | 백엔드 | 프론트엔드 |

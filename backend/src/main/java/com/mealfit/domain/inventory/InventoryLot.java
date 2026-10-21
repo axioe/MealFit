@@ -1,6 +1,8 @@
 package com.mealfit.domain.inventory;
 
 import com.mealfit.global.common.BaseTimeEntity;
+import com.mealfit.global.exception.BusinessException;
+import com.mealfit.global.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -71,6 +73,58 @@ public class InventoryLot extends BaseTimeEntity {
         this.minStockQty = minStockQty != null ? minStockQty : BigDecimal.ZERO;
         this.memo = memo;
         this.status = LotStatus.ACTIVE;
+    }
+
+    public void adjust(BigDecimal quantity, StorageLocation storageLocation, LocalDate expiryDate,
+                       boolean clearExpiryDate, BigDecimal minStockQty, String memo) {
+        validateActive();
+        if (quantity != null) {
+            validateQuantity(quantity, false);
+            this.quantity = quantity;
+            if (quantity.signum() == 0) {
+                this.status = LotStatus.DEPLETED;
+            }
+        }
+        if (storageLocation != null) {
+            this.storageLocation = storageLocation;
+        }
+        if (clearExpiryDate || expiryDate != null) {
+            this.expiryDate = clearExpiryDate ? null : expiryDate;
+        }
+        if (minStockQty != null) {
+            validateQuantity(minStockQty, false);
+            this.minStockQty = minStockQty;
+        }
+        if (memo != null) {
+            this.memo = memo;
+        }
+    }
+
+    public void dispose(BigDecimal quantity) {
+        validateActive();
+        validateQuantity(quantity, true);
+        if (quantity.compareTo(this.quantity) > 0) {
+            throw new BusinessException(ErrorCode.INVENTORY_INVALID_QUANTITY,
+                    "현재 재고보다 많은 수량을 폐기할 수 없습니다.");
+        }
+        this.quantity = this.quantity.subtract(quantity);
+        if (this.quantity.signum() == 0) {
+            this.status = LotStatus.DISPOSED;
+        }
+    }
+
+    private void validateActive() {
+        if (status != LotStatus.ACTIVE) {
+            throw new BusinessException(ErrorCode.INVENTORY_INACTIVE_LOT);
+        }
+    }
+
+    private static void validateQuantity(BigDecimal quantity, boolean positive) {
+        if (quantity == null || quantity.signum() < 0 || (positive && quantity.signum() == 0)
+                || quantity.stripTrailingZeros().scale() > 3
+                || quantity.compareTo(new BigDecimal("999999999.999")) > 0) {
+            throw new BusinessException(ErrorCode.INVENTORY_INVALID_QUANTITY);
+        }
     }
 
     public ExpirationStatus expirationStatus(LocalDate today) {
