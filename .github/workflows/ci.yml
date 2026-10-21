@@ -63,7 +63,8 @@ jobs:
 
   # main에 push되거나 Actions 화면에서 main으로 Run workflow를 누르면,
   # backend·frontend가 모두 통과한 뒤 EC2에 배포한다
-  # 필요한 Secrets: EC2_HOST(서버 IP), EC2_SSH_KEY(.pem 파일 내용)
+  # 필요한 Secret: EC2_SSH_KEY(.pem 파일 내용)
+  # 서버 IP는 웹사이트 주소로 공개되는 값이라 여기 둔다. 탄력적 IP가 바뀌면 이 값만 고친다
   deploy:
     name: deploy (EC2)
     needs: [backend, frontend]
@@ -71,16 +72,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_HOST: 3.39.100.188
     steps:
       - name: Set up SSH key
         env:
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
-          if [ -z "$EC2_HOST" ] || [ -z "$EC2_SSH_KEY" ]; then
-            echo "::error::Secrets EC2_HOST 또는 EC2_SSH_KEY가 비어 있습니다 (Settings → Secrets and variables → Actions)"
+          if [ -z "$EC2_SSH_KEY" ]; then
+            echo "::error::Secret EC2_SSH_KEY가 비어 있습니다 (Settings → Secrets and variables → Actions)"
             exit 1
           fi
+          echo "배포 대상: $EC2_HOST"
           mkdir -p ~/.ssh
           printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2.pem
           chmod 600 ~/.ssh/ec2.pem
