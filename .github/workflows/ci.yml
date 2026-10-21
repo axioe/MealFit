@@ -7,10 +7,10 @@ on:
     branches: [main, develop]
   workflow_dispatch:
 
-# 같은 브랜치/PR에 새로 push하면 이전 실행은 취소한다
+# PR에 새로 push하면 이전 실행은 취소한다. main/develop push는 배포 도중 끊기지 않게 순서대로 실행
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -60,3 +60,52 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+
+  # main에 push되고 backend·frontend가 모두 통과하면 EC2에 배포한다
+  # 필요한 Secrets: EC2_HOST(서버 IP), EC2_SSH_KEY(.pem 파일 내용)
+  deploy:
+    name: deploy (EC2)
+    needs: [backend, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+    steps:
+      - name: Set up SSH key
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2.pem
+          chmod 600 ~/.ssh/ec2.pem
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+      # 서버의 .env는 git이 무시하는 파일이라 reset 해도 그대로 남는다
+      - name: Pull and restart containers
+        run: |
+          ssh -i ~/.ssh/ec2.pem ubuntu@"$EC2_HOST" '
+            set -e
+            cd ~/MealFit
+            git fetch -q origin main
+            git reset -q --hard origin/main
+            git log --oneline -1
+            docker compose -f docker-compose.prod.yml up -d --build
+            docker image prune -f > /dev/null
+          '
+
+      # nginx(화면)와 Spring(API)이 모두 응답할 때까지 최대 3분 기다린다
+      # 없는 API 경로를 부르면 Spring이 살아 있을 때만 ErrorResponse JSON(code 포함)이 온다 (죽어 있으면 nginx 502)
+      - name: Health check
+        run: |
+          for i in $(seq 1 36); do
+            web=$(curl -s -o /dev/null -w '%{http_code}' "http://$EC2_HOST/" || true)
+            api=$(curl -s "http://$EC2_HOST/api/v1/health-check" || true)
+            if [ "$web" = "200" ] && echo "$api" | grep -q '"code"'; then
+              echo "배포 완료: http://$EC2_HOST"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "서버가 응답하지 않습니다 (web=$web)"
+          exit 1
