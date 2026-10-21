@@ -44,6 +44,12 @@ public enum ErrorCode {
             "식단 데이터가 올바르지 않아 확정할 수 없습니다."),
     MEAL_PLAN_ALREADY_COOKED(HttpStatus.CONFLICT, "MEAL_PLAN_007", "조리한 식단은 조리를 먼저 취소한 뒤 취소할 수 있습니다."),
 
+    // 장보기
+    SHOPPING_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "SHOPPING_001", "장보기 항목을 찾을 수 없습니다."),
+    SHOPPING_INVALID_QUANTITY(HttpStatus.BAD_REQUEST, "SHOPPING_002", "수량이 올바르지 않습니다."),
+    SHOPPING_STOCK_IN_EXCEEDED(HttpStatus.CONFLICT, "SHOPPING_003", "구매한 수량보다 많이 입고할 수 없습니다."),
+    SHOPPING_DUPLICATE_ITEM(HttpStatus.BAD_REQUEST, "SHOPPING_004", "같은 장보기 항목을 한 번에 여러 번 보낼 수 없습니다."),
+
     // AI 서비스
     AI_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI_001", "AI 서비스에 연결할 수 없습니다.");
 
