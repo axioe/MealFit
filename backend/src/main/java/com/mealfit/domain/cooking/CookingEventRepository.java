@@ -8,4 +8,6 @@ public interface CookingEventRepository extends JpaRepository<CookingEvent, Long
     Optional<CookingEvent> findByIdAndUserId(Long id, Long userId);
 
     Optional<CookingEvent> findFirstByMealPlanIdAndStatus(Long mealPlanId, CookingStatus status);
+
+    boolean existsByMealPlanIdAndStatus(Long mealPlanId, CookingStatus status);
 }

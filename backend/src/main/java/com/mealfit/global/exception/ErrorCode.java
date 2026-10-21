@@ -32,6 +32,11 @@ public enum ErrorCode {
     MEAL_PLAN_ALL_CONFIRMED(HttpStatus.CONFLICT, "MEAL_PLAN_003", "이 날짜의 세 끼가 모두 확정되어 다시 추천할 수 없습니다."),
     MEAL_PLAN_NO_CANDIDATE(HttpStatus.UNPROCESSABLE_ENTITY, "MEAL_PLAN_004",
             "조건에 맞는 추천 식단이 없습니다. 제외 재료나 조리 시간을 확인해 주세요."),
+    MEAL_PLAN_RESTRICTED_INGREDIENT(HttpStatus.UNPROCESSABLE_ENTITY, "MEAL_PLAN_005",
+            "알레르기·제외 재료가 포함되어 확정할 수 없습니다."),
+    MEAL_PLAN_INVALID_DATA(HttpStatus.UNPROCESSABLE_ENTITY, "MEAL_PLAN_006",
+            "식단 데이터가 올바르지 않아 확정할 수 없습니다."),
+    MEAL_PLAN_ALREADY_COOKED(HttpStatus.CONFLICT, "MEAL_PLAN_007", "조리한 식단은 조리를 먼저 취소한 뒤 취소할 수 있습니다."),
 
     // AI 서비스
     AI_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI_001", "AI 서비스에 연결할 수 없습니다.");

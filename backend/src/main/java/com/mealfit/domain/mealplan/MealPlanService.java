@@ -1,17 +1,22 @@
 package com.mealfit.domain.mealplan;
 
+import com.mealfit.domain.cooking.CookingEventRepository;
+import com.mealfit.domain.cooking.CookingStatus;
 import com.mealfit.domain.inventory.ExpirationStatus;
 import com.mealfit.domain.inventory.InventoryLot;
 import com.mealfit.domain.inventory.InventoryLotRepository;
 import com.mealfit.domain.inventory.LotStatus;
 import com.mealfit.domain.mealplan.dto.AiMealPlanRequest;
 import com.mealfit.domain.mealplan.dto.AiMealSuggestion;
+import com.mealfit.domain.mealplan.dto.MealPlanConfirmResponse;
 import com.mealfit.domain.mealplan.dto.MealPlanRecommendRequest;
 import com.mealfit.domain.mealplan.dto.MealPlanRecommendResponse;
 import com.mealfit.domain.mealplan.dto.MealPlanResponse;
 import com.mealfit.domain.recipe.Recipe;
 import com.mealfit.domain.recipe.RecipeRepository;
 import com.mealfit.domain.recipe.RecipeSource;
+import com.mealfit.domain.shopping.ShoppingListService;
+import com.mealfit.domain.shopping.dto.ShoppingItemResponse;
 import com.mealfit.global.exception.BusinessException;
 import com.mealfit.global.exception.ErrorCode;
 import java.time.LocalDate;
@@ -51,6 +56,8 @@ public class MealPlanService {
     private final FallbackRecipeSelector fallbackRecipeSelector;
     private final ObjectProvider<MealPlanAiClient> aiClientProvider;
     private final ObjectProvider<UserDietProfileProvider> profileProvider;
+    private final ShoppingListService shoppingListService;
+    private final CookingEventRepository cookingEventRepository;
 
     /**
      * 하루 세 끼 추천. 같은 날짜로 다시 부르면 전체 재추천이다:
@@ -91,8 +98,7 @@ public class MealPlanService {
     /** 한 끼 재추천. 초안만 가능하며, 같은 날 다른 끼니는 바꾸지 않는다. */
     @Transactional
     public MealPlanResponse regenerate(Long userId, Long mealPlanId) {
-        MealPlan plan = mealPlanRepository.findByIdAndUserId(mealPlanId, userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.MEAL_PLAN_NOT_FOUND));
+        MealPlan plan = findPlan(userId, mealPlanId);
         if (plan.getStatus() != MealPlanStatus.DRAFT) {
             throw new BusinessException(ErrorCode.MEAL_PLAN_NOT_DRAFT);
         }
@@ -108,15 +114,99 @@ public class MealPlanService {
     }
 
     /**
+     * 서버 검증 후 확정 (FR-MEAL-05, BR-12). 레시피 데이터와 알레르기·제외 재료를 다시 검사하고,
+     * 통과하면 CONFIRMED로 바꾼 뒤 장보기 부족분을 다시 계산한다.
+     */
+    @Transactional
+    public MealPlanConfirmResponse confirm(Long userId, Long mealPlanId) {
+        MealPlan plan = findPlan(userId, mealPlanId);
+        plan.getStatus().validateTransition(MealPlanStatus.CONFIRMED);
+        Recipe recipe = plan.getRecipe();
+
+        List<String> problems = dataProblems(recipe, plan);
+        if (!problems.isEmpty()) {
+            throw new BusinessException(ErrorCode.MEAL_PLAN_INVALID_DATA,
+                    ErrorCode.MEAL_PLAN_INVALID_DATA.getMessage() + " (" + String.join(", ", problems) + ")");
+        }
+        List<String> ingredientNames = recipe.getIngredients().stream()
+                .map(ingredient -> ingredient.getIngredientName().strip())
+                .toList();
+        List<String> violations = IngredientRestriction.violations(
+                ingredientNames, profileOf(userId).restrictedIngredients());
+        if (!violations.isEmpty()) {
+            throw new BusinessException(ErrorCode.MEAL_PLAN_RESTRICTED_INGREDIENT,
+                    ErrorCode.MEAL_PLAN_RESTRICTED_INGREDIENT.getMessage()
+                            + " (" + String.join(", ", violations) + ")");
+        }
+
+        plan.confirm();
+        List<ShoppingItemResponse> shortages = shoppingListService.recalculate(userId, LocalDate.now()).stream()
+                .filter(item -> ingredientNames.contains(item.getIngredientName()))
+                .filter(item -> item.remainingQty().signum() > 0)
+                .map(ShoppingItemResponse::from)
+                .toList();
+        return new MealPlanConfirmResponse(MealPlanResponse.from(plan), shortages);
+    }
+
+    /**
+     * 식단 취소 (FR-MEAL-06). 초안·확정 식단을 취소하고, 확정 식단이었다면 장보기 부족분을 다시 계산한다.
+     * 이미 조리한 식단은 조리를 먼저 취소해야 한다(재고 복원이 먼저).
+     */
+    @Transactional
+    public MealPlanResponse cancel(Long userId, Long mealPlanId) {
+        MealPlan plan = findPlan(userId, mealPlanId);
+        if (cookingEventRepository.existsByMealPlanIdAndStatus(plan.getId(), CookingStatus.COOKED)) {
+            throw new BusinessException(ErrorCode.MEAL_PLAN_ALREADY_COOKED);
+        }
+        boolean wasConfirmed = plan.getStatus() == MealPlanStatus.CONFIRMED;
+        plan.cancel();
+        if (wasConfirmed) {
+            shoppingListService.recalculate(userId, LocalDate.now());
+        }
+        return MealPlanResponse.from(plan);
+    }
+
+    private MealPlan findPlan(Long userId, Long mealPlanId) {
+        return mealPlanRepository.findByIdAndUserId(mealPlanId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEAL_PLAN_NOT_FOUND));
+    }
+
+    /** 확정 전 데이터 무결성 검사: 재료·수량·단위 누락, 비정상 인분 */
+    private static List<String> dataProblems(Recipe recipe, MealPlan plan) {
+        List<String> problems = new ArrayList<>();
+        if (recipe.getServingSize() < 1 || plan.getServings() < 1) {
+            problems.add("인분 비정상");
+        }
+        if (recipe.getIngredients().isEmpty()) {
+            problems.add("재료 누락");
+        }
+        recipe.getIngredients().forEach(ingredient -> {
+            String name = ingredient.getIngredientName();
+            if (name == null || name.isBlank()) {
+                problems.add("재료명 누락");
+            } else if (ingredient.getRequiredQty() == null || ingredient.getRequiredQty().signum() <= 0) {
+                problems.add("수량 비정상: " + name.strip());
+            } else if (ingredient.getUnit() == null || ingredient.getUnit().isBlank()) {
+                problems.add("단위 누락: " + name.strip());
+            }
+        });
+        return problems;
+    }
+
+    private UserDietProfile profileOf(Long userId) {
+        return Optional.ofNullable(profileProvider.getIfAvailable())
+                .map(provider -> provider.getProfile(userId))
+                .orElseGet(UserDietProfile::empty);
+    }
+
+    /**
      * @param keptPlans     같은 날 그대로 두는 끼니 (메뉴가 겹치지 않게 한다)
      * @param previousNames 직전 초안 메뉴명 (가능하면 다른 메뉴를 고른다)
      */
     private List<MealPlan> generate(Long userId, LocalDate planDate, List<MealType> targets, int servings,
                                     List<MealPlan> keptPlans, Set<String> previousNames) {
         LocalDate today = LocalDate.now();
-        UserDietProfile profile = Optional.ofNullable(profileProvider.getIfAvailable())
-                .map(provider -> provider.getProfile(userId))
-                .orElseGet(UserDietProfile::empty);
+        UserDietProfile profile = profileOf(userId);
         List<InventoryLot> availableLots = inventoryLotRepository
                 .findByUserIdAndStatusOrderByExpiryDateAsc(userId, LotStatus.ACTIVE).stream()
                 .filter(lot -> lot.expirationStatus(today) != ExpirationStatus.EXPIRED)
