@@ -1,5 +1,6 @@
 package com.mealfit.domain.recipe;
 
+import com.mealfit.domain.mealplan.MealType;
 import com.mealfit.global.common.BaseTimeEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.CollectionTable;
@@ -70,6 +71,11 @@ public class Recipe extends BaseTimeEntity {
     @Column(nullable = false, length = 20)
     private RecipeSource source;
 
+    /** 로컬 대체 후보로 쓸 끼니. null이면 모든 끼니에 쓸 수 있다. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "meal_type", length = 20)
+    private MealType mealType;
+
     @ElementCollection
     @CollectionTable(name = "recipe_steps", joinColumns = @JoinColumn(name = "recipe_id"))
     @OrderColumn(name = "step_order")
@@ -82,7 +88,7 @@ public class Recipe extends BaseTimeEntity {
     @Builder
     private Recipe(Long userId, String name, String description, int servingSize, int cookTimeMin,
                    BigDecimal calories, BigDecimal proteinG, BigDecimal carbsG, BigDecimal fatG,
-                   boolean nutritionEstimated, RecipeSource source, List<String> steps) {
+                   boolean nutritionEstimated, RecipeSource source, MealType mealType, List<String> steps) {
         this.userId = userId;
         this.name = name;
         this.description = description;
@@ -94,6 +100,7 @@ public class Recipe extends BaseTimeEntity {
         this.fatG = fatG;
         this.nutritionEstimated = nutritionEstimated;
         this.source = source;
+        this.mealType = mealType;
         if (steps != null) {
             this.steps.addAll(steps);
         }
