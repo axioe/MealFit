@@ -1,0 +1,17 @@
+# 운영(EC2) 프로필. docker-compose.prod.yml에서 SPRING_PROFILES_ACTIVE=prod로 켠다.
+# DB 접속 정보는 application.yml의 ${DB_*} 환경 변수로 들어온다.
+spring:
+  jpa:
+    show-sql: false
+
+logging:
+  level:
+    root: INFO
+    com.mealfit: INFO
+
+# 외부에 API 문서를 노출하지 않는다 (nginx도 /api만 넘긴다). Swagger는 로컬에서 확인
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
