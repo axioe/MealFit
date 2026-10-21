@@ -26,6 +26,18 @@ export const EXPIRATION_LABEL = {
   UNKNOWN: '기한 미등록',
 }
 
+export const INTAKE_STATUS_LABEL = {
+  PLANNED: '먹기 전',
+  EATEN: '먹었어요',
+  SKIPPED: '건너뛰었어요',
+}
+
+export const SHOPPING_ITEM_STATUS_LABEL = {
+  NEEDED: '구매 필요',
+  PARTIAL: '일부 구매',
+  PURCHASED: '구매 완료',
+}
+
 export const LOT_STATUS_LABEL = {
   ACTIVE: '보관 중',
   DEPLETED: '다 썼어요',
