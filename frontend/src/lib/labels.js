@@ -25,3 +25,9 @@ export const EXPIRATION_LABEL = {
   EXPIRED: '기한 경과',
   UNKNOWN: '기한 미등록',
 }
+
+export const LOT_STATUS_LABEL = {
+  ACTIVE: '보관 중',
+  DEPLETED: '다 썼어요',
+  DISPOSED: '버렸어요',
+}

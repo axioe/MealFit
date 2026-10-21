@@ -23,6 +23,12 @@ public enum ErrorCode {
 
     // 인증·사용자(AUTH_*, USER_*)는 로그인 담당자가 추가한다
 
+    // 냉장고
+    INVENTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "INVENTORY_001", "재고를 찾을 수 없습니다."),
+    INVENTORY_INVALID_QUANTITY(HttpStatus.BAD_REQUEST, "INVENTORY_002", "수량이 올바르지 않습니다."),
+    INVENTORY_INACTIVE_LOT(HttpStatus.CONFLICT, "INVENTORY_003", "소진되거나 폐기된 재고는 수정할 수 없습니다."),
+    INVENTORY_INVALID_REQUEST(HttpStatus.BAD_REQUEST, "INVENTORY_004", "재고 변경 요청이 올바르지 않습니다."),
+
     // 레시피
     RECIPE_NOT_FOUND(HttpStatus.NOT_FOUND, "RECIPE_001", "레시피를 찾을 수 없습니다."),
 
