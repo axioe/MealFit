@@ -26,6 +26,13 @@ public enum ErrorCode {
     // 레시피
     RECIPE_NOT_FOUND(HttpStatus.NOT_FOUND, "RECIPE_001", "레시피를 찾을 수 없습니다."),
 
+    // 식단
+    MEAL_PLAN_NOT_FOUND(HttpStatus.NOT_FOUND, "MEAL_PLAN_001", "식단을 찾을 수 없습니다."),
+    MEAL_PLAN_NOT_DRAFT(HttpStatus.CONFLICT, "MEAL_PLAN_002", "초안 상태의 식단만 다시 추천할 수 있습니다."),
+    MEAL_PLAN_ALL_CONFIRMED(HttpStatus.CONFLICT, "MEAL_PLAN_003", "이 날짜의 세 끼가 모두 확정되어 다시 추천할 수 없습니다."),
+    MEAL_PLAN_NO_CANDIDATE(HttpStatus.UNPROCESSABLE_ENTITY, "MEAL_PLAN_004",
+            "조건에 맞는 추천 식단이 없습니다. 제외 재료나 조리 시간을 확인해 주세요."),
+
     // AI 서비스
     AI_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI_001", "AI 서비스에 연결할 수 없습니다.");
 

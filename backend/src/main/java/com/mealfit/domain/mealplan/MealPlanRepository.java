@@ -11,4 +11,7 @@ public interface MealPlanRepository extends JpaRepository<MealPlan, Long> {
             Long userId, LocalDate from, LocalDate to);
 
     Optional<MealPlan> findByIdAndUserId(Long id, Long userId);
+
+    /** 해당 날짜의 살아 있는 식단(보통 status = CANCELED를 제외할 때 사용) */
+    List<MealPlan> findByUserIdAndPlanDateAndStatusNot(Long userId, LocalDate planDate, MealPlanStatus status);
 }
