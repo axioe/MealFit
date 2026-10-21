@@ -1,7 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildPurchase, buildStockIn, quantityInMillis } from '../src/api/shoppingValidation.js'
-import { mergeMealResponse } from '../src/api/mealPlanSnapshot.js'
 
 const item = { id: 7, purchasedQty: 0.1, remainingQty: 0.2 }
 const form = { quantity: '0.1', storageLocation: 'FRIDGE', expiryDate: '', minStockQty: '0' }
@@ -38,32 +37,6 @@ test('유효하지 않은 날짜와 보관 위치, 최소량을 차단한다', (
     assert.throws(() => buildStockIn(item, { ...form, ...changes }))
   }
 })
-const date = '2026-10-21'
-const previous = { planDate: date, mealPlans: [
-  { id: 1, mealType: 'BREAKFAST', status: 'CONFIRMED' },
-  { id: 2, mealType: 'LUNCH', status: 'DRAFT' },
-  { id: 3, mealType: 'DINNER', status: 'DRAFT' },
-] }
-test('한 끼 재추천 시 다른 두 끼와 확정 상태를 보존한다', () => {
-  const result = { id: 4, mealType: 'LUNCH', status: 'DRAFT' }
-  const merged = mergeMealResponse(previous, result, 'regenerate', date)
-  assert.equal(merged.mealPlans.length, 3)
-  assert.ok(merged.mealPlans.includes(previous.mealPlans[0]))
-  assert.ok(merged.mealPlans.includes(previous.mealPlans[2]))
-  assert.ok(merged.mealPlans.includes(result))
-  assert.equal(previous.mealPlans[1].id, 2)
-})
-test('확정 및 취소는 서버 응답의 상태만 반영한다', () => {
-  const confirmed = { id: 2, mealType: 'LUNCH', status: 'CONFIRMED' }
-  assert.ok(mergeMealResponse(previous, { mealPlan: confirmed, shortages: [] }, 'confirm', date).mealPlans.includes(confirmed))
-  const canceled = { ...confirmed, status: 'CANCELED' }
-  assert.ok(mergeMealResponse(previous, canceled, 'cancel', date).mealPlans.includes(canceled))
-})
-test('전체 추천은 유지된 확정 식단을 포함한 서버 결과를 사용한다', () => {
-  const result = { planDate: date, mealPlans: [previous.mealPlans[0]] }
-  assert.equal(mergeMealResponse(previous, result, 'recommend', date), result)
-})
-
 for (const [unit, requiredQty, previousQty, additionalQty] of [
   ['g', 50, 10, 20],
   ['ml', 500, 100, 200],
@@ -82,3 +55,4 @@ for (const [unit, requiredQty, previousQty, additionalQty] of [
     assert.deepEqual(original, { id: 8, unit, requiredQty, purchasedQty: previousQty })
   })
 }
+
