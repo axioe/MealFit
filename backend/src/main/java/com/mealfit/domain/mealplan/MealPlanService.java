@@ -62,6 +62,17 @@ public class MealPlanService {
     private final ShoppingListService shoppingListService;
     private final CookingEventRepository cookingEventRepository;
 
+    /** 날짜별 식단 조회. 취소된 식단은 빼고 아침·점심·저녁 순서로 돌려준다. */
+    public MealPlanRecommendResponse getByDate(Long userId, LocalDate planDate) {
+        LocalDate date = planDate != null ? planDate : LocalDate.now(ZONE);
+        List<MealPlanResponse> mealPlans = mealPlanRepository.findByUserIdAndPlanDateAndStatusNot(
+                        userId, date, MealPlanStatus.CANCELED).stream()
+                .sorted(Comparator.comparing(MealPlan::getMealType))
+                .map(this::toResponse)
+                .toList();
+        return new MealPlanRecommendResponse(date, mealPlans);
+    }
+
     /**
      * 하루 세 끼 추천. 같은 날짜로 다시 부르면 전체 재추천이다:
      * 기존 초안은 취소하고, 이미 확정된 끼니는 그대로 두고 나머지 끼니만 새로 만든다.
@@ -92,7 +103,7 @@ public class MealPlanService {
         List<MealPlan> created = generate(userId, planDate, targets, request.servingsOrDefault(), confirmed,
                 previousNames);
         List<MealPlanResponse> mealPlans = new ArrayList<>();
-        confirmed.forEach(plan -> mealPlans.add(MealPlanResponse.from(plan)));
+        confirmed.forEach(plan -> mealPlans.add(toResponse(plan)));
         created.forEach(plan -> mealPlans.add(MealPlanResponse.from(plan)));
         mealPlans.sort(Comparator.comparing(MealPlanResponse::mealType));
         return new MealPlanRecommendResponse(planDate, mealPlans);
@@ -167,6 +178,13 @@ public class MealPlanService {
             shoppingListService.recalculate(userId, LocalDate.now(ZONE));
         }
         return MealPlanResponse.from(plan);
+    }
+
+    /** 확정 식단만 조리될 수 있으므로 그때만 조리 기록을 조회한다. */
+    private MealPlanResponse toResponse(MealPlan plan) {
+        boolean cooked = plan.getStatus() == MealPlanStatus.CONFIRMED
+                && cookingEventRepository.existsByMealPlanIdAndStatus(plan.getId(), CookingStatus.COOKED);
+        return MealPlanResponse.from(plan, cooked);
     }
 
     private MealPlan findPlan(Long userId, Long mealPlanId) {
