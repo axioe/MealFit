@@ -12,6 +12,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -72,7 +73,7 @@ public class ShoppingItem extends BaseTimeEntity {
         if (purchasedQty == null || purchasedQty.signum() < 0) {
             throw new BusinessException(ErrorCode.SHOPPING_INVALID_QUANTITY);
         }
-        this.purchasedQty = purchasedQty;
+        this.purchasedQty = purchasedQty.setScale(3, RoundingMode.HALF_UP);
         refreshStatus();
     }
 

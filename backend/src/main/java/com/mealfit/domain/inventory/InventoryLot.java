@@ -113,6 +113,27 @@ public class InventoryLot extends BaseTimeEntity {
         }
     }
 
+    /** 조리 차감. 0이 되면 소진(DEPLETED). COOK_DEDUCT 이력은 조리 서비스가 같은 트랜잭션에서 남긴다. */
+    public void deduct(BigDecimal quantity) {
+        validateActive();
+        validateQuantity(quantity, true);
+        if (quantity.compareTo(this.quantity) > 0) {
+            throw new BusinessException(ErrorCode.INVENTORY_INVALID_QUANTITY,
+                    "현재 재고보다 많이 차감할 수 없습니다.");
+        }
+        this.quantity = this.quantity.subtract(quantity);
+        if (this.quantity.signum() == 0) {
+            this.status = LotStatus.DEPLETED;
+        }
+    }
+
+    /** 조리 취소 복원. 차감했던 수량을 되돌리고, 소진된 묶음은 다시 사용 가능(ACTIVE) 상태로 바꾼다. */
+    public void restore(BigDecimal quantity) {
+        validateQuantity(quantity, true);
+        this.quantity = this.quantity.add(quantity);
+        this.status = LotStatus.ACTIVE;
+    }
+
     private void validateActive() {
         if (status != LotStatus.ACTIVE) {
             throw new BusinessException(ErrorCode.INVENTORY_INACTIVE_LOT);

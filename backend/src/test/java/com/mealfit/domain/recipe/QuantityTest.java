@@ -47,6 +47,14 @@ class QuantityTest {
     }
 
     @Test
+    void 같은_계열_단위로_바꾼다() {
+        assertThat(q("300", "g").convertTo("kg")).isEqualTo(q("0.3", "kg"));
+        assertThat(q("1.5", "L").convertTo("ml")).isEqualTo(q("1500", "ml"));
+        assertThat(q("2", "개").convertTo("개")).isEqualTo(q("2", "개"));
+        assertThatThrownBy(() -> q("2", "개").convertTo("g")).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void 같은_계열_단위는_더한다() {
         assertThat(q("1", "kg").plus(q("200", "g"))).isEqualTo(q("1200", "g"));
         assertThat(q("1", "L").plus(q("250", "ml"))).isEqualTo(q("1250", "ml"));
