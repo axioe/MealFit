@@ -76,10 +76,17 @@ jobs:
         env:
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
+          if [ -z "$EC2_HOST" ] || [ -z "$EC2_SSH_KEY" ]; then
+            echo "::error::Secrets EC2_HOST 또는 EC2_SSH_KEY가 비어 있습니다 (Settings → Secrets and variables → Actions)"
+            exit 1
+          fi
           mkdir -p ~/.ssh
           printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/ec2.pem
           chmod 600 ~/.ssh/ec2.pem
-          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+          if ! ssh-keyscan -T 15 -H "$EC2_HOST" >> ~/.ssh/known_hosts 2>/dev/null || [ ! -s ~/.ssh/known_hosts ]; then
+            echo "::error::$EC2_HOST:22 에 접속할 수 없습니다. EC2 보안 그룹의 SSH(22) 소스가 0.0.0.0/0 인지 확인하세요"
+            exit 1
+          fi
 
       # 서버의 .env는 git이 무시하는 파일이라 reset 해도 그대로 남는다
       - name: Pull and restart containers
