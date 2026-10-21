@@ -43,3 +43,11 @@ export const LOT_STATUS_LABEL = {
   DEPLETED: '다 썼어요',
   DISPOSED: '버렸어요',
 }
+
+export const INVENTORY_TRANSACTION_TYPE_LABEL = {
+  STOCK_IN: '입고',
+  COOK_DEDUCT: '조리 차감',
+  COOK_RESTORE: '조리 취소 복원',
+  ADJUST: '수량 수정',
+  DISPOSE: '폐기',
+}

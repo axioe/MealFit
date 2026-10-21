@@ -10,6 +10,7 @@ export const queryKeys = {
   },
   inventory: {
     all: ['inventory'],
+    transactions: (lotId) => ['inventory', 'transactions', lotId ?? 'all'],
   },
   mealPlans: {
     all: ['mealPlans'],
