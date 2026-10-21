@@ -31,3 +31,17 @@ const koreanDateFormatter = new Intl.DateTimeFormat('ko-KR', { month: 'long', da
 export function formatKoreanDate(dateString) {
   return koreanDateFormatter.format(parseLocalDate(dateString))
 }
+
+const fullKoreanDateFormatter = new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })
+
+/** '2026-10-21' → '2026년 10월 21일 수요일' */
+export function formatFullKoreanDate(dateString) {
+  return fullKoreanDateFormatter.format(parseLocalDate(dateString))
+}
+
+const weekdayFormatter = new Intl.DateTimeFormat('ko-KR', { weekday: 'long' })
+
+/** '2026-10-21' → '수요일' */
+export function formatWeekday(dateString) {
+  return weekdayFormatter.format(parseLocalDate(dateString))
+}
