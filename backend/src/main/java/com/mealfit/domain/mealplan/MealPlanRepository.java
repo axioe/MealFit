@@ -14,4 +14,8 @@ public interface MealPlanRepository extends JpaRepository<MealPlan, Long> {
 
     /** 해당 날짜의 살아 있는 식단(보통 status = CANCELED를 제외할 때 사용) */
     List<MealPlan> findByUserIdAndPlanDateAndStatusNot(Long userId, LocalDate planDate, MealPlanStatus status);
+
+    /** 장보기 계산 대상: from 날짜 이후의 특정 상태 식단 */
+    List<MealPlan> findByUserIdAndStatusAndPlanDateGreaterThanEqual(Long userId, MealPlanStatus status,
+                                                                     LocalDate from);
 }

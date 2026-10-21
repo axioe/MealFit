@@ -1,5 +1,6 @@
 package com.mealfit.domain.mealplan;
 
+import com.mealfit.domain.mealplan.dto.MealPlanConfirmResponse;
 import com.mealfit.domain.mealplan.dto.MealPlanRecommendRequest;
 import com.mealfit.domain.mealplan.dto.MealPlanRecommendResponse;
 import com.mealfit.domain.mealplan.dto.MealPlanResponse;
@@ -16,7 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "MealPlan", description = "식단 추천")
+@Tag(name = "MealPlan", description = "식단 추천·확정")
 @RestController
 @RequestMapping("/api/v1/meal-plans")
 @RequiredArgsConstructor
@@ -37,5 +38,17 @@ public class MealPlanController {
     @ResponseStatus(HttpStatus.CREATED)
     public MealPlanResponse regenerate(@CurrentUserId Long userId, @PathVariable Long id) {
         return mealPlanService.regenerate(userId, id);
+    }
+
+    @Operation(summary = "서버 검증 후 확정 (알레르기·제외 재료·데이터 검사, 장보기 부족분 계산)")
+    @PostMapping("/{id}/confirm")
+    public MealPlanConfirmResponse confirm(@CurrentUserId Long userId, @PathVariable Long id) {
+        return mealPlanService.confirm(userId, id);
+    }
+
+    @Operation(summary = "식단 취소 (초안·확정 식단, 확정 식단이면 장보기 부족분 재계산)")
+    @PostMapping("/{id}/cancel")
+    public MealPlanResponse cancel(@CurrentUserId Long userId, @PathVariable Long id) {
+        return mealPlanService.cancel(userId, id);
     }
 }
