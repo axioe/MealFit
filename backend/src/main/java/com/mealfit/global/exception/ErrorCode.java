@@ -21,6 +21,9 @@ public enum ErrorCode {
 
     // 인증·사용자(AUTH_*, USER_*)는 로그인 담당자가 추가한다
 
+    // 레시피
+    RECIPE_NOT_FOUND(HttpStatus.NOT_FOUND, "RECIPE_001", "레시피를 찾을 수 없습니다."),
+
     // AI 서비스
     AI_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI_001", "AI 서비스에 연결할 수 없습니다.");
 
