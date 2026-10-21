@@ -20,6 +20,7 @@ import com.mealfit.domain.shopping.dto.ShoppingItemResponse;
 import com.mealfit.global.exception.BusinessException;
 import com.mealfit.global.exception.ErrorCode;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -49,6 +50,8 @@ public class MealPlanService {
     /** 반복 최소화에 쓰는 최근 식단 기간 (D10 확정 전 임시값) */
     private static final int RECENT_DAYS = 7;
     private static final int MAX_TEXT_LENGTH = 500;
+    /** 서버 시간대(EC2는 UTC)와 상관없이 한국 날짜로 계산한다. 냉장고 도메인과 같은 기준 */
+    private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
 
     private final MealPlanRepository mealPlanRepository;
     private final RecipeRepository recipeRepository;
@@ -58,6 +61,17 @@ public class MealPlanService {
     private final ObjectProvider<UserDietProfileProvider> profileProvider;
     private final ShoppingListService shoppingListService;
     private final CookingEventRepository cookingEventRepository;
+
+    /** 날짜별 식단 조회. 취소된 식단은 빼고 아침·점심·저녁 순서로 돌려준다. */
+    public MealPlanRecommendResponse getByDate(Long userId, LocalDate planDate) {
+        LocalDate date = planDate != null ? planDate : LocalDate.now(ZONE);
+        List<MealPlanResponse> mealPlans = mealPlanRepository.findByUserIdAndPlanDateAndStatusNot(
+                        userId, date, MealPlanStatus.CANCELED).stream()
+                .sorted(Comparator.comparing(MealPlan::getMealType))
+                .map(this::toResponse)
+                .toList();
+        return new MealPlanRecommendResponse(date, mealPlans);
+    }
 
     /**
      * 하루 세 끼 추천. 같은 날짜로 다시 부르면 전체 재추천이다:
@@ -89,7 +103,7 @@ public class MealPlanService {
         List<MealPlan> created = generate(userId, planDate, targets, request.servingsOrDefault(), confirmed,
                 previousNames);
         List<MealPlanResponse> mealPlans = new ArrayList<>();
-        confirmed.forEach(plan -> mealPlans.add(MealPlanResponse.from(plan)));
+        confirmed.forEach(plan -> mealPlans.add(toResponse(plan)));
         created.forEach(plan -> mealPlans.add(MealPlanResponse.from(plan)));
         mealPlans.sort(Comparator.comparing(MealPlanResponse::mealType));
         return new MealPlanRecommendResponse(planDate, mealPlans);
@@ -140,7 +154,7 @@ public class MealPlanService {
         }
 
         plan.confirm();
-        List<ShoppingItemResponse> shortages = shoppingListService.recalculate(userId, LocalDate.now()).stream()
+        List<ShoppingItemResponse> shortages = shoppingListService.recalculate(userId, LocalDate.now(ZONE)).stream()
                 .filter(item -> ingredientNames.contains(item.getIngredientName()))
                 .filter(item -> item.remainingQty().signum() > 0)
                 .map(ShoppingItemResponse::from)
@@ -161,9 +175,16 @@ public class MealPlanService {
         boolean wasConfirmed = plan.getStatus() == MealPlanStatus.CONFIRMED;
         plan.cancel();
         if (wasConfirmed) {
-            shoppingListService.recalculate(userId, LocalDate.now());
+            shoppingListService.recalculate(userId, LocalDate.now(ZONE));
         }
         return MealPlanResponse.from(plan);
+    }
+
+    /** 확정 식단만 조리될 수 있으므로 그때만 조리 기록을 조회한다. */
+    private MealPlanResponse toResponse(MealPlan plan) {
+        boolean cooked = plan.getStatus() == MealPlanStatus.CONFIRMED
+                && cookingEventRepository.existsByMealPlanIdAndStatus(plan.getId(), CookingStatus.COOKED);
+        return MealPlanResponse.from(plan, cooked);
     }
 
     private MealPlan findPlan(Long userId, Long mealPlanId) {
@@ -205,7 +226,7 @@ public class MealPlanService {
      */
     private List<MealPlan> generate(Long userId, LocalDate planDate, List<MealType> targets, int servings,
                                     List<MealPlan> keptPlans, Set<String> previousNames) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(ZONE);
         UserDietProfile profile = profileOf(userId);
         List<InventoryLot> availableLots = inventoryLotRepository
                 .findByUserIdAndStatusOrderByExpiryDateAsc(userId, LotStatus.ACTIVE).stream()

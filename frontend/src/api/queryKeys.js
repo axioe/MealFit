@@ -4,9 +4,17 @@
  * 예) 조리 완료 → inventory, mealPlans, dashboard 무효화
  */
 export const queryKeys = {
-  dashboard: (date) => ['dashboard', date],
+  dashboard: {
+    all: ['dashboard'],
+    byDate: (date) => ['dashboard', date],
+    profile: ['dashboard', 'profile'],
+    workout: (date) => ['dashboard', 'workout', date],
+    weight: ['dashboard', 'weight'],
+    coaching: ['dashboard', 'coaching'],
+  },
   inventory: {
     all: ['inventory'],
+    transactions: (lotId) => ['inventory', 'transactions', lotId ?? 'all'],
   },
   mealPlans: {
     all: ['mealPlans'],
