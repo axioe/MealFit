@@ -16,14 +16,14 @@ def record_failure(error, started):
     logger.warning('Gemini 호출 실패: exception=%s status=%s elapsed_ms=%d',
                    type(error).__name__, getattr(error, 'code', None), int((time.monotonic() - started) * 1000))
 
-def generate(request, api_key, model):
+def generate(request, api_key, model, *, system_prompt=SYSTEM_PROMPT, response_schema=RESPONSE_SCHEMA):
     if not api_key:
         raise ServiceError(503, 'AI_002', 'AI 서비스의 GEMINI_API_KEY 설정이 필요합니다.')
     started = time.monotonic()
     try:
         with genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=18000, retry_options=types.HttpRetryOptions(attempts=1))) as client:
             response = client.models.generate_content(model=model, contents=json.dumps(request, ensure_ascii=False),
-                config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT, response_mime_type='application/json', response_json_schema=RESPONSE_SCHEMA))
+                config=types.GenerateContentConfig(system_instruction=system_prompt, response_mime_type='application/json', response_json_schema=response_schema))
             return response.text
     except TimeoutException as error:
         record_failure(error, started)
