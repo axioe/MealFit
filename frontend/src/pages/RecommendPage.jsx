@@ -1,3 +1,4 @@
+import { mealCardActions, recipePlanLink } from '@/api/cookingUx'
 import { DailyMealInfo, DailyRecipePreview } from '@/components/recommend/DailyRecipePreview'
 import { QuickCookingPanel } from '@/components/recommend/QuickCookingPanel'
 import { useEffect, useRef, useState } from 'react'
@@ -19,20 +20,19 @@ const ORDER = Object.values(MEAL_TYPE)
 function RecipeDetails({ plan }) {
   return <div data-meal-details className="flex min-w-0 flex-col border-t border-gray-100 px-4 pt-4">
     <DailyRecipePreview plan={plan} />
-    <Link to={`/recipes/${plan.recipe.id}?servings=${plan.servings}&date=${plan.planDate}`} className="btn-secondary mt-4 min-h-11 w-full text-xs">재료·조리법 보기</Link>
   </div>
 }
 
 function MealConfirmation({ selection, busy, error, onClose, onConfirm }) {
   const dialog = useRef(null)
-  const title = selection.action === 'confirm' ? '이 식단으로 확정할까요?' : selection.action === 'cancel' ? '이 식단을 취소할까요?' : '다시 추천받을까요?'
+  const title = selection.action === 'confirm' ? '이 식단으로 결정할까요?' : selection.action === 'cancel' ? '이 식단을 취소할까요?' : '다시 추천받을까요?'
   useEffect(() => { const node = dialog.current; node.showModal(); return () => node.close() }, [])
   return <dialog ref={dialog} aria-label={title} onCancel={(event) => { event.preventDefault(); if (!busy) onClose() }} className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-2xl border border-gray-200 bg-white p-5 shadow-xl backdrop:bg-black/40">
     <div className="flex items-start justify-between gap-2"><h3 className="font-bold">{title}</h3><button type="button" disabled={busy} onClick={onClose} aria-label="식단 확인 창 닫기" className="btn-secondary min-h-11 px-3"><X aria-hidden="true" className="h-4 w-4" /></button></div>
     {selection.plan && <p className="mt-3 break-all text-sm font-semibold">{MEAL_TYPE_LABEL[selection.plan.mealType]} · {selection.plan.recipe.name}</p>}
-    <p className="my-4 text-sm leading-6 text-gray-600">{selection.action === 'confirm' ? '서버가 식단을 검증하고 장보기 부족분을 계산합니다. 냉장고 재고는 차감하지 않습니다.' : selection.action === 'cancel' ? '취소한 식단은 되돌릴 수 없으며, 확정 식단의 장보기 부족분은 다시 계산됩니다.' : '기존 추천 초안은 취소하고 새 초안을 만듭니다. 이미 확정한 끼니는 유지합니다.'}</p>
+    <p className="my-4 text-sm leading-6 text-gray-600">{selection.action === 'confirm' ? '식단을 확정하면 부족한 재료가 장보기 목록에 반영돼요. 냉장고 재고는 요리를 완료했을 때 차감됩니다.' : selection.action === 'cancel' ? '취소한 식단은 되돌릴 수 없으며, 확정 식단의 장보기 부족분은 다시 계산됩니다.' : '기존 추천 초안은 취소하고 새 초안을 만듭니다. 이미 확정한 끼니는 유지합니다.'}</p>
     {error && <p role="alert" className="mb-4 whitespace-pre-wrap break-all rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
-    <div className="flex flex-wrap justify-end gap-2"><button type="button" disabled={busy} onClick={onClose} className="btn-secondary min-h-11">닫기</button><button type="button" disabled={busy} onClick={onConfirm} className="btn-primary min-h-11">{busy ? '처리 중...' : selection.action === 'confirm' ? '식단 확정' : selection.action === 'cancel' ? '식단 취소' : '추천 실행'}</button></div>
+    <div className="flex flex-wrap justify-end gap-2"><button type="button" disabled={busy} onClick={onClose} className="btn-secondary min-h-11">돌아가기</button><button type="button" disabled={busy} onClick={onConfirm} className="btn-primary min-h-11">{busy ? '처리 중...' : selection.action === 'confirm' ? '식단 확정' : selection.action === 'cancel' ? '식단 취소' : '추천 실행'}</button></div>
   </dialog>
 }
 
@@ -64,7 +64,7 @@ function RecommendDay({ date, setDate }) {
       const result = await mutation.mutateAsync({ action, id: plan?.id, date, servings: Number(servings) })
       setSelection(null)
       setShortages(action === 'confirm' ? result.shortages : null)
-      setMessage(action === 'confirm' ? '식단을 확정했습니다.' : action === 'cancel' ? '식단을 취소했습니다.' : action === 'regenerate' ? '선택한 끼니를 다시 추천했습니다. 다른 끼니는 유지했습니다.' : '추천 초안을 저장했습니다. 끼니별로 확인 후 확정해 주세요.')
+      setMessage(action === 'confirm' ? '식단을 확정했어요. 요리하기를 눌러 사용할 재료를 확인해 보세요.' : action === 'cancel' ? '식단을 취소했습니다.' : action === 'regenerate' ? '선택한 끼니를 다시 추천했습니다. 다른 끼니는 유지했습니다.' : '추천 초안을 저장했습니다. 끼니별로 확인 후 확정해 주세요.')
     } catch (failure) {
       setError(getErrorMessage(failure) + ((!failure.response || failure.response.status >= 500) ? ' 처리 여부가 불확실할 수 있으므로 같은 요청을 바로 반복하지 마세요. 날짜별 식단을 다시 조회해 서버 상태를 확인해 주세요.' : ''))
     } finally { lock.current = false }
@@ -90,15 +90,26 @@ function RecommendDay({ date, setDate }) {
     {!canAct ? null : plans.length === 0 ? <div className="card py-12 text-center"><UtensilsCrossed aria-hidden="true" className="mx-auto mb-4 h-10 w-10 text-gray-300" /><h3 className="font-bold">이 날짜에 저장된 식단이 없어요</h3><p className="mt-2 text-sm leading-6 text-gray-500">날짜와 인분을 확인하고 추천받기를 눌러 새 초안을 만들어 보세요.</p></div> : <div className="grid gap-4 xl:grid-cols-3">{ORDER.map((type) => {
       const plan = plans.find((row) => row.mealType === type)
       if (!plan) return null
-      const draft = plan.status === MEAL_PLAN_STATUS.DRAFT
+      const actions = mealCardActions(plan)
+      const blocked = busy || Boolean(selection)
+      const recipeLink = recipePlanLink(plan)
+      const cookingLink = recipePlanLink(plan, true)
       return <article key={plan.id} data-meal-card={type} className="grid min-w-0 gap-4 overflow-hidden rounded-2xl border border-gray-200 bg-white pb-4 transition-colors hover:border-emerald-300 xl:row-span-5 xl:grid-rows-subgrid">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-gray-50/70 px-4 py-3"><h3 className="flex items-center gap-2 text-sm font-bold"><span aria-hidden="true">{type === MEAL_TYPE.BREAKFAST ? '🌅' : type === MEAL_TYPE.LUNCH ? '☀️' : '🌙'}</span>{MEAL_TYPE_LABEL[type]}</h3><MealPlanStatusBadge status={plan.status} /></div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-gray-50/70 px-4 py-3"><h3 className="flex items-center gap-2 text-sm font-bold"><span aria-hidden="true">{type === MEAL_TYPE.BREAKFAST ? '🌅' : type === MEAL_TYPE.LUNCH ? '☀️' : '🌙'}</span>{MEAL_TYPE_LABEL[type]}</h3><div className="flex flex-wrap gap-1"><MealPlanStatusBadge status={plan.status} />{actions.cooked && <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">요리 완료</span>}</div></div>
         <div className="min-w-0 space-y-3 px-4"><h4 className="break-all text-lg font-extrabold text-gray-900">{plan.recipe.name}</h4>
         <div className="flex flex-wrap gap-2">{Object.values(RECIPE_SOURCE).includes(plan.recipe.source) && <RecipeSourceBadge source={plan.recipe.source} />}</div>
         <DailyMealInfo plan={plan} /></div>
         <div data-meal-reason className="min-w-0 px-4">{plan.recommendationReason && <p className="h-full whitespace-pre-wrap break-all rounded-xl bg-amber-50 p-3 text-sm leading-6 text-amber-900">{plan.recommendationReason}</p>}</div>
         <RecipeDetails key={plan.recipe.id} plan={plan} />
-        <div data-meal-actions className="flex flex-wrap content-start items-start gap-2 border-t border-gray-100 px-4 pt-4">{draft && <><button type="button" disabled={busy || Boolean(selection)} onClick={() => choose('regenerate', plan)} className="btn-secondary min-h-11"><RefreshCw aria-hidden="true" className="h-4 w-4" />다시 추천</button><button type="button" disabled={busy || Boolean(selection)} onClick={() => choose('confirm', plan)} className="btn-primary min-h-11">이 식단으로 확정</button></>}{plan.status !== MEAL_PLAN_STATUS.CANCELED && <button type="button" disabled={busy || Boolean(selection)} onClick={() => choose('cancel', plan)} className="btn-secondary min-h-11">식단 취소</button>}</div>
+        <div data-meal-actions className="grid content-start gap-2 border-t border-gray-100 px-4 pt-4 sm:grid-cols-2">
+          {actions.canCook && <Link to={cookingLink || '#'} aria-disabled={blocked || !cookingLink} onClick={(event) => { if (blocked || !cookingLink) event.preventDefault() }} className="btn-primary min-h-11 sm:col-span-2">요리하기</Link>}
+          {actions.cooked && <p className="rounded-xl bg-emerald-50 p-3 text-sm font-bold text-emerald-800 sm:col-span-2">요리를 완료한 식단이에요.</p>}
+          <Link to={recipeLink || '#'} aria-disabled={blocked || !recipeLink} onClick={(event) => { if (blocked || !recipeLink) event.preventDefault() }} className="btn-secondary min-h-11">레시피 보기</Link>
+          {actions.draft && <button type="button" disabled={blocked} onClick={() => choose('confirm', plan)} className="btn-primary min-h-11">이 식단으로 확정</button>}
+          {actions.draft && <button type="button" disabled={blocked} onClick={() => choose('regenerate', plan)} className="btn-secondary min-h-11"><RefreshCw aria-hidden="true" className="h-4 w-4" />다시 추천</button>}
+          {actions.canCancelPlan && <button type="button" disabled={blocked} onClick={() => choose('cancel', plan)} className="btn-secondary min-h-11">식단 취소</button>}
+          {actions.cooked && <Link to="/fridge" className="btn-secondary min-h-11">냉장고 확인</Link>}
+        </div>
       </article>
     })}</div>}
     <div className="flex flex-wrap gap-3"><Link to="/fridge" className="btn-secondary min-h-11">냉장고 확인</Link><Link to="/shopping" className="btn-secondary min-h-11">장보기 목록 보기</Link></div>

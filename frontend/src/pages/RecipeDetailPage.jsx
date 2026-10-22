@@ -1,6 +1,7 @@
+import { CookingPanel } from "@/components/recommend/CookingPanel";
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ChefHat, Clock, RefreshCw } from "lucide-react";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
+import { ArrowLeft, Clock, RefreshCw } from "lucide-react";
 import { getErrorMessage } from "@/api/client";
 import { useInventory } from "@/api/inventory";
 import { useRecipe } from "@/api/recipes";
@@ -22,11 +23,15 @@ function RecipeContent({
   initialServings,
   backTo,
   onServingsChange,
+  mealPlanId,
+  date,
+  focusCooking,
 }) {
   const [requestedServings, setRequestedServings] = useState(initialServings);
   const [servingInput, setServingInput] = useState(
     initialServings == null ? "" : String(initialServings),
   );
+  const [cookingBusy, setCookingBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const [lastRecipe, setLastRecipe] = useState(null);
   const requestLock = useRef(false);
@@ -44,7 +49,7 @@ function RecipeContent({
 
   function applyServings(event) {
     event.preventDefault();
-    if (requestLock.current || recipe.isFetching) return;
+    if (requestLock.current || recipe.isFetching || cookingBusy) return;
     if (!validRecipeServings(servingInput)) {
       setFormError("인분은 1 이상 2,147,483,647 이하의 정수로 입력해 주세요.");
       return;
@@ -57,13 +62,13 @@ function RecipeContent({
     onServingsChange(next);
   }
   function retryRecipe() {
-    if (requestLock.current || recipe.isFetching) return;
+    if (requestLock.current || recipe.isFetching || cookingBusy) return;
     requestLock.current = true;
     recipe.refetch({ cancelRefetch: false });
   }
   return (
     <div className="space-y-6">
-      <Link to={backTo} className="btn-secondary min-h-11">
+      <Link to={backTo} aria-disabled={cookingBusy} onClick={(event) => { if (cookingBusy) event.preventDefault(); }} className="btn-secondary min-h-11">
         <ArrowLeft aria-hidden="true" className="h-4 w-4" />
         식단 추천으로 돌아가기
       </Link>
@@ -94,7 +99,7 @@ function RecipeContent({
           )}
           <button
             type="button"
-            disabled={recipe.isFetching}
+            disabled={recipe.isFetching || cookingBusy}
             onClick={retryRecipe}
             className="btn-secondary min-h-11"
           >
@@ -150,7 +155,7 @@ function RecipeContent({
                   max="2147483647"
                   step="1"
                   value={servingInput}
-                  disabled={recipe.isFetching}
+                  disabled={recipe.isFetching || cookingBusy}
                   onChange={(event) => {
                     setServingInput(event.target.value);
                     setFormError("");
@@ -165,7 +170,7 @@ function RecipeContent({
               <button
                 type="submit"
                 disabled={
-                  recipe.isFetching ||
+                  cookingBusy || recipe.isFetching ||
                   (!recipe.isError && Number(servingInput) === data.servings)
                 }
                 className="btn-primary min-h-11"
@@ -388,46 +393,17 @@ function RecipeContent({
             </dl>
           </section>
 
-          <section
-            className="card space-y-4"
-            aria-labelledby="recipe-cooking-title"
-          >
-            <h3
-              id="recipe-cooking-title"
-              className="flex items-center gap-2 text-base font-bold"
-            >
-              <ChefHat
-                aria-hidden="true"
-                className="h-5 w-5 text-emerald-600"
-              />
-              조리 처리
-            </h3>
-            <p
-              id="recipe-cooking-help"
-              className="text-sm leading-6 text-gray-600"
-            >
-              현재 조리 완료·취소 API가 없어 아직 조리 결과를 저장하거나 재고를
-              차감·복원할 수 없습니다.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled
-                aria-describedby="recipe-cooking-help"
-                className="btn-primary min-h-11"
-              >
-                조리 완료 · 준비 중
-              </button>
-              <button
-                type="button"
-                disabled
-                aria-describedby="recipe-cooking-help"
-                className="btn-secondary min-h-11"
-              >
-                조리 취소 · 준비 중
-              </button>
-            </div>
-          </section>
+          <CookingPanel
+            inventory={inventory}
+            usageScope={String(requestedServings ?? data.servings)}
+            focusCooking={focusCooking}
+            recipeId={recipeId}
+            mealPlanId={mealPlanId}
+            date={date}
+            servings={data.servings}
+            recipeReady={!recipe.isFetching && !recipe.isError && Number(servingInput) === data.servings && (requestedServings == null || requestedServings === data.servings)}
+            onBusyChange={setCookingBusy}
+          />
         </>
       )}
     </div>
@@ -436,6 +412,7 @@ function RecipeContent({
 
 export function RecipeDetailPage() {
   const { id } = useParams();
+  const { hash } = useLocation();
   const [params, setParams] = useSearchParams();
   const date = validRecipeDate(params.get("date")) ? params.get("date") : null;
   const backTo = date ? `/recommend?date=${date}` : "/recommend";
@@ -462,7 +439,7 @@ export function RecipeDetailPage() {
             기본 인분으로 조회
           </Link>
         )}
-        <Link to={backTo} className="btn-secondary min-h-11">
+        <Link to={backTo} aria-disabled={cookingBusy} onClick={(event) => { if (cookingBusy) event.preventDefault(); }} className="btn-secondary min-h-11">
           식단 추천으로 돌아가기
         </Link>
       </section>
@@ -470,6 +447,9 @@ export function RecipeDetailPage() {
   }
   return (
     <RecipeContent
+      focusCooking={hash === "#cook"}
+      mealPlanId={params.get("mealPlanId")}
+      date={date}
       key={id}
       recipeId={id}
       initialServings={rawServings == null ? undefined : Number(rawServings)}

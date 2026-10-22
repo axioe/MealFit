@@ -12,6 +12,7 @@ import java.util.List;
 /**
  * 조리 차감 미리보기. 재고와 이력은 바꾸지 않는다.
  *
+ * @param mealPlanId    식단 없이 재료 목록만으로 미리보기했으면 null
  * @param canCook       지금 조리 완료를 누를 수 있는지
  * @param blockedReason 조리할 수 없는 이유 (가능하면 null)
  */
@@ -36,15 +37,25 @@ public record CookingPreviewResponse(
 
     public static CookingPreviewResponse of(MealPlan plan, CookingPlan cookingPlan, boolean cooked,
                                             String blockedReason, LocalDate today) {
-        List<Ingredient> ingredients = cookingPlan.ingredients().stream()
+        return new CookingPreviewResponse(plan.getId(), plan.getRecipe().getName(), plan.getServings(), cooked,
+                blockedReason == null, blockedReason, ingredients(cookingPlan, today));
+    }
+
+    /** 식단 없는 조리 미리보기 */
+    public static CookingPreviewResponse withoutPlan(String recipeName, int servings, CookingPlan cookingPlan,
+                                                     String blockedReason, LocalDate today) {
+        return new CookingPreviewResponse(null, recipeName, servings, false,
+                blockedReason == null, blockedReason, ingredients(cookingPlan, today));
+    }
+
+    private static List<Ingredient> ingredients(CookingPlan cookingPlan, LocalDate today) {
+        return cookingPlan.ingredients().stream()
                 .map(ingredient -> new Ingredient(ingredient.ingredientName(), ingredient.requiredQty(),
                         ingredient.availableQty(), ingredient.shortageQty(), ingredient.unit(),
                         ingredient.deductions().stream()
                                 .map(deduction -> lotDeduction(deduction, today))
                                 .toList()))
                 .toList();
-        return new CookingPreviewResponse(plan.getId(), plan.getRecipe().getName(), plan.getServings(), cooked,
-                blockedReason == null, blockedReason, ingredients);
     }
 
     private static LotDeduction lotDeduction(CookingPlan.Deduction deduction, LocalDate today) {
