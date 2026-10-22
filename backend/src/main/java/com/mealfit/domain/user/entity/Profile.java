@@ -65,4 +65,32 @@ public class Profile extends BaseTimeEntity {
     public Set<String> getExcludedIngredients() {
         return Set.copyOf(excludedIngredients);
     }
+
+    /**
+     * 닉네임과 식단 추천 조건을 수정합니다.
+     * 입력값은 요청 DTO와 Service에서 검증합니다.
+     *
+     * @param cookTimeMin 선호 조리 시간(분)
+     * @param mealBudget 한 끼 예산(원)
+     */
+    public void updateDietProfile(
+        String nickname,
+        String goal,
+        Integer cookTimeMin,
+        Integer mealBudget,
+        Set<String> allergies,
+        Set<String> excludedIngredients
+    ) {
+        this.nickname = nickname;
+        this.goal = goal;
+        this.cookTimeMin = cookTimeMin;
+        this.mealBudget = mealBudget;
+
+        // JPA가 관리하는 컬렉션 객체를 유지하고 내용만 교체합니다.
+        this.allergies.clear();
+        this.allergies.addAll(allergies);
+
+        this.excludedIngredients.clear();
+        this.excludedIngredients.addAll(excludedIngredients);
+    }
 }

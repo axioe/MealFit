@@ -1,6 +1,7 @@
 package com.mealfit.global.security;
 
 import com.mealfit.global.exception.ErrorCode;
+import com.mealfit.domain.user.repository.UserRepository;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
@@ -25,6 +26,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final SecurityErrorHandler securityErrorHandler;
+    private final UserRepository userRepository;
 
     /**
      * 회원가입·로그인·재발급·로그아웃은 Access Token 없이 호출합니다.
@@ -84,6 +86,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             reject(response, ErrorCode.AUTH_ACCESS_TOKEN_EXPIRED);
             return;
         } catch (JwtException | IllegalArgumentException exception) {
+            reject(response, ErrorCode.AUTH_INVALID_TOKEN);
+            return;
+        }
+
+        // 서명·만료 검증만으로는 탈퇴 전에 받은 토큰을 차단할 수 없습니다.
+        // DB의 최신 회원 상태를 매 요청마다 확인하고, 없거나 탈퇴한 회원은 인증하지 않습니다.
+        if (!userRepository.existsByIdAndDeletedAtIsNull(userId)) {
             reject(response, ErrorCode.AUTH_INVALID_TOKEN);
             return;
         }

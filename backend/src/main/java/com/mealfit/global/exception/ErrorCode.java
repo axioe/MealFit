@@ -44,6 +44,11 @@ public enum ErrorCode {
         "로그인 정보가 만료되었거나 유효하지 않습니다. 다시 로그인해 주세요."
     ),
 
+    // 회원 탈퇴 본인 확인 오류는 400으로 응답해 토큰 만료와 구분합니다.
+    USER_PASSWORD_MISMATCH(
+        HttpStatus.BAD_REQUEST, "USER_001", "현재 비밀번호가 올바르지 않습니다."
+    ),
+
     // 냉장고
     INVENTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "INVENTORY_001", "재고를 찾을 수 없습니다."),
     INVENTORY_INVALID_QUANTITY(HttpStatus.BAD_REQUEST, "INVENTORY_002", "수량이 올바르지 않습니다."),

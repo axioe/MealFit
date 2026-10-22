@@ -1,5 +1,8 @@
 package com.mealfit.domain.cooking;
 
+import com.mealfit.support.TestUserFixture;
+import org.junit.jupiter.api.BeforeEach;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -69,6 +72,14 @@ class CookingConcurrencyTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    private TestUserFixture userFixture;
+
+    /** 작업 스레드에서도 조회할 수 있게 커밋된 회원·프로필을 준비합니다. */
+    @BeforeEach
+    void prepareUserProfile() {
+        userFixture = TestUserFixture.create(jdbcTemplate, USER);
+    }
+
     @AfterEach
     void cleanUp() {
         jdbcTemplate.update("delete from inventory_transactions where user_id = ?", USER);
@@ -77,6 +88,11 @@ class CookingConcurrencyTest {
         jdbcTemplate.update("delete from shopping_items where user_id = ?", USER);
         jdbcTemplate.update("delete from meal_plans where user_id = ?", USER);
         jdbcTemplate.update("delete from recipes where user_id = ?", USER);
+
+        // 재고·식단 정리 후 이 테스트가 생성한 회원·프로필만 제거합니다.
+        if (userFixture != null) {
+            userFixture.close();
+        }
     }
 
     @Test

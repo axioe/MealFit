@@ -86,10 +86,15 @@ public class AuthService {
             throw new BusinessException(ErrorCode.AUTH_LOGIN_FAILED);
         }
 
-        User user = userRepository.findByEmail(email)
+        User user = userRepository.findByEmailForUpdate(email)
             .orElseThrow(() ->
                 new BusinessException(ErrorCode.AUTH_LOGIN_FAILED)
             );
+
+        // 탈퇴 여부도 일반 로그인 실패와 동일하게 응답합니다.
+        if (user.getDeletedAt() != null) {
+            throw new BusinessException(ErrorCode.AUTH_LOGIN_FAILED);
+        }
 
         if (!passwordEncoder.matches(
             request.password(),
@@ -125,6 +130,11 @@ public class AuthService {
             .orElseThrow(() ->
                 new BusinessException(ErrorCode.AUTH_INVALID_REFRESH_TOKEN)
             );
+
+        // Access Token을 사용하지 않는 재발급 API에서도 회원 상태를 확인합니다.
+        if (user.getDeletedAt() != null) {
+            throw new BusinessException(ErrorCode.AUTH_INVALID_REFRESH_TOKEN);
+        }
 
         RefreshToken token = refreshTokenRepository
             .findByTokenHashForUpdate(tokenHash)
@@ -246,10 +256,15 @@ public class AuthService {
      */
     private TokenResponse issueTokens(User user, Profile profile) {
         // 같은 회원의 토큰 발급·폐기를 순서대로 처리합니다.
-        userRepository.findByIdForUpdate(user.getId())
+        User activeUser = userRepository.findByIdForUpdate(user.getId())
             .orElseThrow(() ->
                 new BusinessException(ErrorCode.UNAUTHORIZED)
             );
+
+        // 모든 토큰 발급 경로에서 탈퇴 회원을 한 번 더 차단합니다.
+        if (activeUser.getDeletedAt() != null) {
+            throw new BusinessException(ErrorCode.AUTH_LOGIN_FAILED);
+        }
 
         String accessToken = jwtTokenProvider.createAccessToken(
             user.getId(),

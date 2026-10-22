@@ -269,4 +269,73 @@ class AuthApiTest {
             executor.shutdownNow();
         }
     }
+
+    /** 실제 탈퇴 API 연결 전, 엔티티의 탈퇴 상태를 독립 트랜잭션으로 저장합니다. */
+    private void withdrawUser(long userId) {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            users.findByIdForUpdate(userId).orElseThrow().withdraw();
+        });
+    }
+
+    @Test
+    void 탈퇴회원은_올바른_비밀번호로도_로그인할수없다() throws Exception {
+        String email = email();
+        var session = signup(email);
+        long userId = session.path("user").path("id").asLong();
+        withdrawUser(userId);
+        var firstDeletedAt = users.findById(userId).orElseThrow().getDeletedAt();
+        withdrawUser(userId);
+        assertThat(users.findById(userId).orElseThrow().getDeletedAt()).isEqualTo(firstDeletedAt);
+
+        mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(Map.of("email", email, "password", PASSWORD))))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("AUTH_002"));
+    }
+
+    @Test
+    void 탈퇴회원은_기존_리프레시토큰으로_재발급할수없다() throws Exception {
+        var session = signup(email());
+        long userId = session.path("user").path("id").asLong();
+        String token = session.path("refreshToken").asText();
+        assertThat(tokens.findByTokenHash(refreshProvider.hashToken(token)).orElseThrow().isRevoked()).isFalse();
+        long before = tokens.count();
+        withdrawUser(userId);
+
+        // 토큰이 아직 만료·폐기되지 않아도 회원 상태만으로 차단해야 합니다.
+        refresh(token).andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("AUTH_005"));
+        assertThat(tokens.count()).isEqualTo(before);
+    }
+
+    @Test
+    void 탈퇴전_발급한_액세스토큰은_탈퇴직후_차단되고_다른회원은_영향없다() throws Exception {
+        var session = signup(email());
+        var other = signup(email());
+        String access = session.path("accessToken").asText();
+        mvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + access))
+            .andExpect(status().isOk());
+        withdrawUser(session.path("user").path("id").asLong());
+
+        for (String path : List.of("/api/v1/me", "/api/v1/me/profile/details", "/api/v1/inventory/lots")) {
+            mvc.perform(get(path).header("Authorization", "Bearer " + access))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTH_003"));
+        }
+        mvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + other.path("accessToken").asText()))
+            .andExpect(status().isOk());
+        refresh(other.path("refreshToken").asText()).andExpect(status().isOk());
+    }
+
+    @Test
+    void 존재하지않는_회원의_유효한서명토큰도_차단한다() throws Exception {
+        String token = Jwts.builder().issuer("mealfit").subject("9223372036854775807")
+                .issuedAt(new Date()).expiration(Date.from(Instant.now().plusSeconds(300)))
+                .signWith(new SecretKeySpec(Base64.getDecoder().decode(properties.secret()), "HmacSHA256"), Jwts.SIG.HS256)
+                .compact();
+        mvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + token))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("AUTH_003"));
+    }
+
 }

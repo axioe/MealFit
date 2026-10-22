@@ -14,7 +14,7 @@ export const MOCK = {
   // false: GET /api/v1/dashboard 하나로 받는다 (최원석)
   dashboard: true,
   // GET/PUT /api/v1/me/profile (최원석)
-  profile: true,
+  profile: false,
   // 운동 루틴 (유지훈, Phase 1)
   workout: true,
   // 체중 기록 (최원석, Phase 1)

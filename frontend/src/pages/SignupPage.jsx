@@ -144,7 +144,7 @@ export function SignupPage() {
 
           {/* 가입 API가 저장하지 않는 신체·운동 정보는 이 화면에서 수집하지 않습니다. */}
           <p className="text-[11px] text-gray-500 leading-relaxed bg-gray-50 p-2.5 rounded-xl border border-gray-100">
-            가입 후 마이페이지로 이동합니다. 추가 프로필 저장 기능은 준비 중입니다.
+            가입 후 마이페이지에서 식단 목표와 알레르기 등 추가 프로필을 설정할 수 있습니다.
           </p>
 
           <button

@@ -1,5 +1,9 @@
 package com.mealfit.domain.mealplan;
 
+import com.mealfit.support.TestUserFixture;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.jdbc.core.JdbcTemplate;
+
 import com.mealfit.support.TestJwt;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -35,6 +39,17 @@ class MealPlanQueryTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private JdbcTemplate fixtureJdbc;
+
+    /** 프로필 연결부가 실제 회원 조건을 읽을 수 있도록 기본 데이터를 준비합니다. */
+    @BeforeEach
+    void prepareUserProfile() {
+        // 이 클래스의 @Transactional에 포함돼 테스트 종료 시 함께 롤백됩니다.
+        TestUserFixture.create(fixtureJdbc, 1L);
+    }
+
 
     @Autowired
     private ObjectMapper objectMapper;

@@ -1,6 +1,7 @@
 package com.mealfit.global.security;
 
 import lombok.RequiredArgsConstructor;
+import com.mealfit.domain.user.repository.UserRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -19,6 +20,7 @@ public class SecurityConfig {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final SecurityErrorHandler securityErrorHandler;
+    private final UserRepository userRepository;
 
     @Bean
     public SecurityFilterChain securityFilterChain(
@@ -28,7 +30,8 @@ public class SecurityConfig {
         JwtAuthenticationFilter jwtFilter =
             new JwtAuthenticationFilter(
                 jwtTokenProvider,
-                securityErrorHandler
+                securityErrorHandler,
+                userRepository
             );
 
         http

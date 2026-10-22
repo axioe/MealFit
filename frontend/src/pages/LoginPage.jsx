@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useLogin } from "@/api/auth";
 import { getErrorMessage } from "@/api/client";
 import { AlertCircle, Lock, Mail, Sparkles } from "lucide-react";
@@ -8,6 +8,7 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const login = useLogin();
   const navigate = useNavigate();
+  const location = useLocation();
   const submitLock = useRef(false);
 
   // 저장 중 상태와 서버 오류를 기존 화면 영역에 연결합니다.
@@ -68,19 +69,28 @@ export function LoginPage() {
           <div className="flex-grow border-t border-gray-200"></div>
         </div>
 
+        {location.state?.withdrawn && (
+          <p role="status" className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+            회원 탈퇴가 완료되었습니다.
+          </p>
+        )}
+
         {error && (
-          <div role="alert" className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
+          <div
+            role="alert"
+            className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2"
+          >
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-4 text-xs"
-        >
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div>
-            <label htmlFor="login-email" className="font-bold text-gray-700 block mb-1">
+            <label
+              htmlFor="login-email"
+              className="font-bold text-gray-700 block mb-1"
+            >
               이메일 주소
             </label>
             <div className="relative">
@@ -101,7 +111,10 @@ export function LoginPage() {
           </div>
 
           <div>
-            <label htmlFor="login-password" className="font-bold text-gray-700 block mb-1">
+            <label
+              htmlFor="login-password"
+              className="font-bold text-gray-700 block mb-1"
+            >
               비밀번호
             </label>
             <div className="relative">
