@@ -2,8 +2,9 @@ import { useRef, useState } from 'react'
 import { Plus, RefreshCw, Search, Sparkles } from 'lucide-react'
 import { getErrorMessage } from '@/api/client'
 import { useInventory } from '@/api/inventory'
-import { quickCookingExamples, searchIngredients, selectableIngredients } from '@/api/quickCooking'
-import { prepareQuickCookingInput, adaptMockQuickRecipes } from '@/api/quickCookingView'
+import { searchIngredients, selectableIngredients } from '@/api/quickCooking'
+import { loadQuickRecommendations } from '@/api/quickCookingService'
+import { QuickRecipeDetail } from './QuickRecipeDetail'
 import { QuickRecipeResults } from './QuickRecipeResults'
 import { QuickStockForm, IngredientIcon } from './QuickStockForm'
 import { EXPIRATION_STATUS, LOT_STATUS } from '@/lib/enums'
@@ -21,6 +22,7 @@ export function QuickCookingPanel() {
   const [servings, setServings] = useState('1')
   const [maxCookTimeMin, setMaxCookTimeMin] = useState('15')
   const [demo, setDemo] = useState(false)
+  const [detail, setDetail] = useState(null)
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -38,10 +40,9 @@ export function QuickCookingPanel() {
     setBusy(true)
     setError('')
     try {
-      const input = prepareQuickCookingInput(chosen, { servings, maxCookTimeMin })
-      const recipes = adaptMockQuickRecipes(quickCookingExamples(), chosen)
-      await new Promise((resolve) => setTimeout(resolve, 200))
-      setResult({ signature, recipes, input })
+      const recommendation = loadQuickRecommendations(chosen, { servings, maxCookTimeMin })
+      setDetail(null)
+      setResult({ signature, ...recommendation })
     } catch (failure) {
       setError(failure.message || '개발용 예시를 표시하지 못했습니다. 다시 시도해 주세요.')
     } finally {
@@ -53,6 +54,7 @@ export function QuickCookingPanel() {
   const activeLots = (inventory.data?.groups ?? []).flatMap((group) => group.lots ?? []).filter((lot) => lot.status === LOT_STATUS.ACTIVE)
   const imminent = activeLots.filter((lot) => [EXPIRATION_STATUS.TODAY, EXPIRATION_STATUS.IMMINENT].includes(lot.expirationStatus)).length
   const expired = activeLots.filter((lot) => lot.expirationStatus === EXPIRATION_STATUS.EXPIRED).length
+  if (detail) return <QuickRecipeDetail key={detail.recipe.key} recipe={detail.recipe} initialMode={detail.mode} inventory={inventory} onBack={() => setDetail(null)} />
   return <div className="space-y-6">
     <header className="rounded-2xl bg-gradient-to-br from-emerald-600 via-teal-700 to-emerald-800 p-5 text-white md:p-6">
       <span className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold"><Sparkles aria-hidden="true" className="h-4 w-4" />스마트 냉장고 · 15분 간편 요리</span>
@@ -95,7 +97,8 @@ export function QuickCookingPanel() {
       {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
       {result && !currentResult && demo && <p role="status" className="text-sm text-gray-500">재료 또는 재고가 변경됐습니다. 최신 선택으로 예시를 다시 확인해 주세요.</p>}
     </section>
-    {currentResult && <QuickRecipeResults recipes={currentResult.recipes} />}
+    {currentResult && !currentResult.recipes.length && <p role="status" className="card text-sm text-gray-500">표시할 추천 요리가 없어요. 재료를 확인하고 다시 시도해 주세요.</p>}
+    {currentResult && <QuickRecipeResults recipes={currentResult.recipes} onRecipe={(recipe) => setDetail({ recipe, mode: 'detail' })} onPrepare={(recipe) => setDetail({ recipe, mode: 'prepare' })} />}
     {showStockIn && <StockInDialog onClose={() => setShowStockIn(false)} onSuccess={() => { setShowStockIn(false); setMessage('실제 냉장고에 등록했습니다. 갱신된 목록에서 재료를 선택해 주세요.') }} />}
   </div>
 }
