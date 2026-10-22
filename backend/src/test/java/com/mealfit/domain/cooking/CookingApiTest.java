@@ -122,6 +122,19 @@ class CookingApiTest {
                 .content("{\"mealPlanId\":" + plan.getId() + "}"));
     }
 
+    /** ingredients: JSON 배열 문자열. 예: [{"ingredientName":"감자","quantity":100,"unit":"g"}] */
+    private ResultActions cook(MealPlan plan, String ingredients) throws Exception {
+        return mockMvc.perform(post("/api/v1/cooking-events").with(TestJwt.user(1L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mealPlanId\":" + plan.getId() + ",\"ingredients\":" + ingredients + "}"));
+    }
+
+    private ResultActions preview(MealPlan plan, String ingredients) throws Exception {
+        return mockMvc.perform(post("/api/v1/cooking/preview").with(TestJwt.user(1L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mealPlanId\":" + plan.getId() + ",\"ingredients\":" + ingredients + "}"));
+    }
+
     private long cookOk(MealPlan plan) throws Exception {
         String body = cook(plan).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).get("id").asLong();
@@ -351,6 +364,105 @@ class CookingApiTest {
                 .andExpect(jsonPath("$.code").value("COOKING_001"));
         assertThat(mealPlanRepository.findById(plan.getId()).orElseThrow().getStatus())
                 .isEqualTo(MealPlanStatus.CONFIRMED);
+    }
+
+    @Test
+    void 수정한_수량으로_미리보기하고_같은_양을_차감한다() throws Exception {
+        // 레시피 2인분 600g 대신 0.25kg만 쓰고, 양파는 뺀다 (목록에서 빠지거나 0이면 차감 안 함)
+        MealPlan plan = confirmedPlan(2, "닭고기", "300", "g", "양파", "50", "g", "대파", "1", "대");
+        InventoryLot chicken = lot("닭고기", "1", "kg", TODAY.plusDays(2));
+        InventoryLot onion = lot("양파", "200", "g", TODAY.plusDays(2));
+        String ingredients = "[{\"ingredientName\":\"닭고기\",\"quantity\":0.25,\"unit\":\"kg\"},"
+                + "{\"ingredientName\":\"양파\",\"quantity\":0,\"unit\":\"g\"}]";
+
+        preview(plan, ingredients)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.canCook").value(true))
+                .andExpect(jsonPath("$.ingredients.length()").value(1))
+                .andExpect(jsonPath("$.ingredients[0].ingredientName").value("닭고기"))
+                .andExpect(jsonPath("$.ingredients[0].requiredQty").value(250.0))
+                .andExpect(jsonPath("$.ingredients[0].deductions[0].quantity").value(0.25));
+        assertThat(reload(chicken).getQuantity()).isEqualByComparingTo("1");
+
+        String body = cook(plan, ingredients)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.changes.length()").value(1))
+                .andExpect(jsonPath("$.changes[0].qtyChange").value(-0.25))
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(reload(chicken).getQuantity()).isEqualByComparingTo("0.75");
+        assertThat(reload(onion).getQuantity()).isEqualByComparingTo("200");
+
+        // 취소하면 수정한 수량만큼만 복원한다
+        cancel(objectMapper.readTree(body).get("id").asLong()).andExpect(status().isOk());
+        assertThat(reload(chicken).getQuantity()).isEqualByComparingTo("1");
+    }
+
+    @Test
+    void 수정한_수량이_재고보다_많으면_거부한다() throws Exception {
+        MealPlan plan = confirmedPlan(1, "달걀", "1", "개");
+        InventoryLot egg = lot("달걀", "2", "개", null);
+        String ingredients = "[{\"ingredientName\":\"달걀\",\"quantity\":3,\"unit\":\"개\"}]";
+
+        preview(plan, ingredients)
+                .andExpect(jsonPath("$.canCook").value(false))
+                .andExpect(jsonPath("$.blockedReason").value(org.hamcrest.Matchers.containsString("달걀 1개")));
+        cook(plan, ingredients)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("COOKING_004"));
+
+        assertThat(reload(egg).getQuantity()).isEqualByComparingTo("2");
+    }
+
+    @Test
+    void 레시피에_없는_재료나_다른_계열_단위는_거부한다() throws Exception {
+        MealPlan plan = confirmedPlan(1, "감자", "200", "g");
+        InventoryLot potato = lot("감자", "500", "g", null);
+        lot("당근", "500", "g", null);
+
+        cook(plan, "[{\"ingredientName\":\"당근\",\"quantity\":100,\"unit\":\"g\"}]")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COOKING_006"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("당근")));
+        cook(plan, "[{\"ingredientName\":\"감자\",\"quantity\":2,\"unit\":\"개\"}]")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COOKING_006"));
+        preview(plan, "[{\"ingredientName\":\"당근\",\"quantity\":100,\"unit\":\"g\"}]")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COOKING_006"));
+
+        assertThat(reload(potato).getQuantity()).isEqualByComparingTo("500");
+        assertThat(cookingEventRepository.existsByMealPlanIdAndStatus(plan.getId(), CookingStatus.COOKED)).isFalse();
+    }
+
+    @Test
+    void 같은_재료를_두_번_보내거나_모두_빼면_거부한다() throws Exception {
+        MealPlan plan = confirmedPlan(1, "감자", "200", "g");
+        lot("감자", "500", "g", null);
+
+        cook(plan, "[{\"ingredientName\":\"감자\",\"quantity\":100,\"unit\":\"g\"},"
+                + "{\"ingredientName\":\"감자\",\"quantity\":0.1,\"unit\":\"kg\"}]")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COOKING_007"));
+        cook(plan, "[{\"ingredientName\":\"감자\",\"quantity\":0,\"unit\":\"g\"}]")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COOKING_006"));
+        cook(plan, "[]")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COOKING_006"));
+    }
+
+    @Test
+    void 수정한_수량이_음수거나_비어_있으면_400() throws Exception {
+        MealPlan plan = confirmedPlan(1, "감자", "200", "g");
+        lot("감자", "500", "g", null);
+
+        cook(plan, "[{\"ingredientName\":\"감자\",\"quantity\":-1,\"unit\":\"g\"}]")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON_400"));
+        cook(plan, "[{\"ingredientName\":\"감자\",\"unit\":\"g\"}]")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON_400"));
     }
 
     @Test
