@@ -3,6 +3,7 @@ package com.mealfit.domain.cooking;
 import com.mealfit.domain.cooking.dto.CookingEventRequest;
 import com.mealfit.domain.cooking.dto.CookingEventResponse;
 import com.mealfit.domain.cooking.dto.CookingPreviewResponse;
+import com.mealfit.domain.cooking.dto.IngredientCookingRequest;
 import com.mealfit.global.web.CurrentUserId;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,14 +30,36 @@ public class CookingController {
     @Operation(summary = "조리 차감 미리보기 (재고·이력은 바꾸지 않음)")
     @GetMapping("/cooking/preview")
     public CookingPreviewResponse preview(@CurrentUserId Long userId, @RequestParam Long mealPlanId) {
-        return cookingService.preview(userId, mealPlanId);
+        return cookingService.preview(userId, mealPlanId, null);
     }
 
-    @Operation(summary = "조리 완료 (확정 식단만, 재고 차감과 COOK_DEDUCT 이력 저장)")
+    @Operation(summary = "수정한 재료 사용량으로 조리 차감 미리보기 (레시피 재료의 수량 변경·빼기만 허용)")
+    @PostMapping("/cooking/preview")
+    public CookingPreviewResponse previewWithUsages(@CurrentUserId Long userId,
+                                                    @Valid @RequestBody CookingEventRequest request) {
+        return cookingService.preview(userId, request.mealPlanId(), request.usages());
+    }
+
+    @Operation(summary = "조리 완료 (확정 식단만, 재고 차감과 COOK_DEDUCT 이력 저장, ingredients로 사용량 수정 가능)")
     @PostMapping("/cooking-events")
     @ResponseStatus(HttpStatus.CREATED)
     public CookingEventResponse cook(@CurrentUserId Long userId, @Valid @RequestBody CookingEventRequest request) {
         return cookingService.cook(userId, request);
+    }
+
+    @Operation(summary = "식단 없이 재료 목록만으로 조리 차감 미리보기 (15분 요리 등, 재고·이력은 바꾸지 않음)")
+    @PostMapping("/cooking/ingredients/preview")
+    public CookingPreviewResponse previewIngredients(@CurrentUserId Long userId,
+                                                     @Valid @RequestBody IngredientCookingRequest request) {
+        return cookingService.previewIngredients(userId, request);
+    }
+
+    @Operation(summary = "식단 없이 재료 목록만으로 조리 완료 (같은 clientRequestId는 한 번만 차감)")
+    @PostMapping("/cooking-events/ingredients")
+    @ResponseStatus(HttpStatus.CREATED)
+    public CookingEventResponse cookIngredients(@CurrentUserId Long userId,
+                                                @Valid @RequestBody IngredientCookingRequest request) {
+        return cookingService.cookIngredients(userId, request);
     }
 
     @Operation(summary = "조리 취소 (조리 당시 차감한 묶음에 원래 수량대로 복원)")

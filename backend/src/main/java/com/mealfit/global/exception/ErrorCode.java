@@ -77,6 +77,12 @@ public enum ErrorCode {
     COOKING_ALREADY_COOKED(HttpStatus.CONFLICT, "COOKING_003", "이미 조리 완료한 식단입니다."),
     COOKING_INSUFFICIENT_STOCK(HttpStatus.CONFLICT, "COOKING_004", "재고가 부족해 조리할 수 없습니다."),
     COOKING_ALREADY_RESTORED(HttpStatus.CONFLICT, "COOKING_005", "이미 취소한 조리입니다."),
+    COOKING_INVALID_INGREDIENT(HttpStatus.BAD_REQUEST, "COOKING_006", "레시피 재료의 수량만 바꾸거나 뺄 수 있습니다."),
+    COOKING_DUPLICATE_INGREDIENT(HttpStatus.BAD_REQUEST, "COOKING_007", "같은 재료를 한 번에 여러 번 보낼 수 없습니다."),
+    COOKING_RESTRICTED_INGREDIENT(HttpStatus.UNPROCESSABLE_ENTITY, "COOKING_008",
+            "알레르기·제외 재료가 포함되어 조리할 수 없습니다."),
+    COOKING_DUPLICATE_REQUEST(HttpStatus.CONFLICT, "COOKING_009",
+            "같은 조리 요청을 이미 처리하고 있습니다. 조리 기록을 확인해 주세요."),
 
     // AI 서비스
     AI_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI_001", "AI 서비스에 연결할 수 없습니다.");

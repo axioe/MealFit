@@ -15,6 +15,8 @@ public interface CookingEventRepository extends JpaRepository<CookingEvent, Long
 
     boolean existsByMealPlanIdAndStatus(Long mealPlanId, CookingStatus status);
 
+    Optional<CookingEvent> findByUserIdAndClientRequestId(Long userId, String clientRequestId);
+
     /** 같은 조리 취소가 동시에 들어와도 복원은 한 번만 되게 잠근다 (BR-10, BR-13). */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select event from CookingEvent event where event.id = :id and event.userId = :userId")
