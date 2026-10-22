@@ -28,16 +28,17 @@ export function QuickRecipeDetail({ recipe, initialMode, inventory, onBack }) {
   return <div className="space-y-5">
     <button type="button" disabled={busy} onClick={onBack} className="btn-secondary min-h-11"><ArrowLeft aria-hidden="true" className="h-4 w-4" />15분 추천 목록으로 돌아가기</button>
     <section className="card min-w-0 space-y-4">
-      <span className="inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-900">개발용 mock · 실제 AI 추천 아님</span>
+      <span className="inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-900">{recipe.source === 'AI_GENERATED' ? 'AI 생성 · Gemini' : '개발용 mock · 실제 AI 추천 아님'}</span>
       <h2 ref={title} tabIndex={-1} className="scroll-mt-24 break-all text-2xl font-extrabold focus-visible:outline-emerald-600">{recipe.name}</h2>
       {recipe.description && <p className="break-all text-sm leading-7 text-gray-600">{recipe.description}</p>}
       <div className="flex flex-wrap gap-3 text-sm text-gray-600"><span className="flex items-center gap-1"><Clock aria-hidden="true" className="h-4 w-4" />{recipe.cookTimeMin == null ? '조리 시간 미제공' : `예상 ${recipe.cookTimeMin}분`}</span><span>{recipe.servings == null ? '인분 정보 미제공' : `${recipe.servings}인분`}</span></div>
-      <p className="text-xs leading-6 text-gray-500">임시 예시이며 저장된 식단이 아니에요. 입력한 추천 인분으로 환산되지 않으며 새로고침하면 목록부터 다시 확인해 주세요.</p>
+      <p className="text-xs leading-6 text-gray-500">추천 요리는 아직 저장된 식단이 아니에요. 인분과 수량은 추천 응답 기준이며 새로고침하면 목록에서 다시 추천받아 주세요.</p>
+      {recipe.reason && <p className="break-all rounded-xl bg-amber-50 p-3 text-sm leading-6 text-amber-900">추천 이유: {recipe.reason}</p>}
       {!preparing && <button type="button" className="btn-primary min-h-11" onClick={() => setPreparing(true)}>요리 준비하기</button>}
     </section>
     <section className="card space-y-4" aria-label="15분 요리 재료와 보유 현황">
       <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-extrabold">필요한 재료 · 현재 냉장고 비교</h3><button type="button" disabled={inventory.isFetching} onClick={() => inventory.refetch({ cancelRefetch: false })} className="btn-secondary min-h-11"><RefreshCw aria-hidden="true" className="h-4 w-4" />재고 새로고침</button></div>
-      <p className="text-xs leading-6 text-gray-500">카드는 선택한 재료와 비교하고, 이 화면은 현재 냉장고 전체와 비교해요. 기한 경과 재고는 제외하고 개수와 무게는 임의로 환산하지 않아요.</p>
+      <p className="text-xs leading-6 text-gray-500">카드는 추천 요청 당시의 재고와 비교하고, 이 화면은 현재 냉장고 전체와 비교해요. 기한 경과 재고는 제외하고 개수와 무게는 임의로 환산하지 않아요.</p>
       {inventory.isFetching && <p role="status" className="text-sm text-gray-500">최신 재고를 확인하고 있어요. 입력 내용은 유지해요.</p>}
       {inventory.isError && <p role="alert" className="text-sm text-rose-700">{getErrorMessage(inventory.error)} 재고를 다시 조회해 주세요.</p>}
       {!recipe.ingredients.length && <p className="text-sm text-gray-500">제공된 재료 정보가 없어요.</p>}
@@ -48,7 +49,7 @@ export function QuickRecipeDetail({ recipe, initialMode, inventory, onBack }) {
     </section>
     <section className="card space-y-4" aria-label="15분 요리 조리 순서"><h3 className="font-extrabold">단계별 조리법</h3>{recipe.steps.length ? <ol className="space-y-3">{recipe.steps.map((step, index) => <li key={index} className="flex items-start gap-3 rounded-xl bg-gray-50 p-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-800">{index + 1}</span><p className="min-w-0 whitespace-pre-wrap break-all text-sm leading-7">{step}</p></li>)}</ol> : <p className="text-sm text-gray-500">제공된 조리 순서가 없어요.</p>}</section>
     {preparing && <ActualIngredientsEditor session={session} analysis={analysis} inventoryReady={ready} disabled={locked || inventory.isFetching} actualUsageSupported preparedDraft={draft} onRowsChange={(rows) => setSession({ ...session, rows })} onReset={() => setSession({ ...session, rows: session.baseline.map((row) => ({ ...row })), notice: '레시피 기준으로 되돌렸어요.' })} />}
-    {preparing && <section aria-label="15분 요리 준비 요약" className="card space-y-4"><h3 className="font-extrabold">실제 사용량 확인 및 조리</h3><p className="text-xs leading-6 text-amber-900">추천은 개발용 mock이지만, 아래 완료를 확정하면 실제 냉장고에서 재료가 차감돼요. 서버 미리보기를 먼저 확인해 주세요.</p>{recipe.servings == null && <p className="text-xs text-gray-500">인분 정보가 없어 서버 기본 1인분으로 기록해요. 입력 수량은 인분에 따라 환산하지 않아요.</p>}<ServerCookingActions mode="ingredients" body={body} inputError={inputError || (Object.keys(analysis.errors).length ? '입력값과 사용 가능한 재고를 확인해 주세요.' : '')} inventory={inventory} onLockChange={setLocked} onBusyChange={setBusy} /></section>}
+    {preparing && <section aria-label="15분 요리 준비 요약" className="card space-y-4"><h3 className="font-extrabold">실제 사용량 확인 및 조리</h3><p className="text-xs leading-6 text-amber-900">추천만으로 재고가 바뀌지는 않아요. 아래 완료를 확정하면 실제 냉장고에서 재료가 차감돼요. 서버 미리보기를 먼저 확인해 주세요.</p>{recipe.servings == null && <p className="text-xs text-gray-500">인분 정보가 없어 서버 기본 1인분으로 기록해요. 입력 수량은 인분에 따라 환산하지 않아요.</p>}<ServerCookingActions mode="ingredients" body={body} inputError={inputError || (Object.keys(analysis.errors).length ? '입력값과 사용 가능한 재고를 확인해 주세요.' : '')} inventory={inventory} onLockChange={setLocked} onBusyChange={setBusy} /></section>}
 
   </div>
 }
