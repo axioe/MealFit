@@ -3,7 +3,8 @@ import { Plus, RefreshCw, Search, Sparkles } from 'lucide-react'
 import { getErrorMessage } from '@/api/client'
 import { useInventory } from '@/api/inventory'
 import { searchIngredients, selectableIngredients } from '@/api/quickCooking'
-import { loadQuickRecommendations } from '@/api/quickCookingService'
+import { prepareServerQuickInput } from '@/api/quickRecipeRequests'
+import { useQuickRecommendation } from '@/api/quickRecommendations'
 import { QuickRecipeDetail } from './QuickRecipeDetail'
 import { QuickRecipeResults } from './QuickRecipeResults'
 import { QuickStockForm, IngredientIcon } from './QuickStockForm'
@@ -19,9 +20,8 @@ export function QuickCookingPanel() {
   const [selected, setSelected] = useState([])
   const [showStockIn, setShowStockIn] = useState(false)
   const [message, setMessage] = useState('')
-  const [servings, setServings] = useState('1')
   const [maxCookTimeMin, setMaxCookTimeMin] = useState('15')
-  const [demo, setDemo] = useState(false)
+  const recommendation = useQuickRecommendation()
   const [detail, setDetail] = useState(null)
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -31,20 +31,21 @@ export function QuickCookingPanel() {
   const chosen = items.filter((item) => selected.includes(item.key))
   const visible = searchIngredients(items, search)
   const ready = !inventory.isFetching && !inventory.isError
-  const signature = JSON.stringify([servings, maxCookTimeMin, chosen.map((item) => [item.key, item.quantity, item.lots])])
-  const currentResult = demo && ready && result?.signature === signature ? result : null
+  const signature = JSON.stringify([maxCookTimeMin, chosen.map((item) => [item.key, item.quantity, item.lots])])
+  const currentResult = ready && result?.signature === signature ? result : null
 
-  async function showExamples() {
-    if (lock.current || !demo || !ready || !chosen.length) return
+  async function requestRecommendation() {
+    if (lock.current || !ready || !chosen.length) return
     lock.current = true
     setBusy(true)
     setError('')
     try {
-      const recommendation = loadQuickRecommendations(chosen, { servings, maxCookTimeMin })
+      setResult(null)
+      const response = await recommendation.mutateAsync(prepareServerQuickInput(chosen, maxCookTimeMin))
       setDetail(null)
-      setResult({ signature, ...recommendation })
+      setResult({ signature, ...response })
     } catch (failure) {
-      setError(failure.message || '개발용 예시를 표시하지 못했습니다. 다시 시도해 주세요.')
+      setError(getErrorMessage(failure, failure.message || 'AI 추천 결과를 불러오지 못했습니다. 다시 시도해 주세요.'))
     } finally {
       lock.current = false
       setBusy(false)
@@ -87,17 +88,17 @@ export function QuickCookingPanel() {
     </section>
     <section className="card space-y-4" aria-label="15분 요리 요청">
       <div><p className="text-xs font-bold text-emerald-600">RECIPE MATCH</p><h3 className="mt-1 font-extrabold">추천 기준 및 재료 확인</h3><p className="mt-1 text-xs leading-5 text-gray-500">15분 이내 · 활성 재고 사용 · 기한 경과 제외 · 다른 단위 임의 환산 없음</p></div>
-      <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900"><p>추천 API 준비 중 · mock 추천 자체는 저장·차감되지 않아요. 요리 준비 후 완료를 확정하면 실제 냉장고에 반영돼요.</p><label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={demo} disabled={busy} onChange={(event) => { setDemo(event.target.checked); setResult(null) }} className="h-4 w-4 accent-emerald-600" />개발용 mock 결과 사용</label></div>
+      <p className="rounded-xl bg-violet-50 p-3 text-xs leading-6 text-violet-900">Gemini AI가 현재 냉장고 재고로 추천해요. 추천만으로 재고는 바뀌지 않으며, 실제 사용량은 조리 전 서버 미리보기에서 다시 확인해요.</p>
       <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">선택한 재료 {chosen.length}개</h3><button type="button" disabled={!chosen.length || busy} onClick={() => setSelected([])} className="btn-secondary min-h-11">선택 해제</button></div>
       <div className="flex flex-wrap gap-2">{chosen.map((item) => <span key={item.key} className="max-w-full break-all rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{item.ingredientName} {item.quantity}{item.unit}</span>)}</div>
-      <fieldset disabled={busy} className="grid grid-cols-2 gap-3 sm:max-w-sm"><label className="min-w-0"><span className="label">요리 인분</span><input type="number" min="1" max="10" step="1" value={servings} onChange={(event) => setServings(event.target.value)} className="input min-h-11" /></label><label className="min-w-0"><span className="label">최대 조리 시간 (분)</span><input type="number" min="1" max="15" step="1" value={maxCookTimeMin} onChange={(event) => setMaxCookTimeMin(event.target.value)} className="input min-h-11" /></label></fieldset>
-      <p className="text-xs leading-5 text-gray-500">API 연결 준비용 입력입니다. 현재 고정 mock의 수량·조리 시간은 변경되지 않습니다.</p>
-      <button type="button" disabled={!demo || !ready || !chosen.length || busy} onClick={showExamples} className="btn-primary min-h-11"><Sparkles className="h-4 w-4" aria-hidden="true" />{busy ? '개발용 예시 준비 중…' : currentResult ? '다시 추천하기 (mock)' : '15분 요리 추천받기 (mock)'}</button>
-      {!demo && <p className="text-xs text-gray-500">실제 추천은 API 연동 후 제공됩니다. 화면 확인은 위의 개발용 mock을 켜 주세요.</p>}
+      <label className="block max-w-xs"><span className="label">최대 조리 시간 (분)</span><input type="number" min="1" max="15" step="1" value={maxCookTimeMin} disabled={busy} onChange={(event) => setMaxCookTimeMin(event.target.value)} className="input min-h-11" /></label>
+      <p className="text-xs leading-5 text-gray-500">인분과 필요 수량은 AI 응답 기준으로 표시해요. 조리 시간은 예상치예요.</p>
+      <button type="button" disabled={!ready || !chosen.length || busy} onClick={requestRecommendation} className="btn-primary min-h-11"><Sparkles className="h-4 w-4" aria-hidden="true" />{busy ? 'AI 요리 추천 중…' : currentResult ? '다시 추천하기' : '15분 요리 추천받기'}</button>
       {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
-      {result && !currentResult && demo && <p role="status" className="text-sm text-gray-500">재료 또는 재고가 변경됐습니다. 최신 선택으로 예시를 다시 확인해 주세요.</p>}
+      {result && !currentResult && <p role="status" className="text-sm text-gray-500">재료 또는 재고가 변경됐습니다. 최신 선택으로 다시 추천받아 주세요.</p>}
     </section>
     {currentResult && !currentResult.recipes.length && <p role="status" className="card text-sm text-gray-500">표시할 추천 요리가 없어요. 재료를 확인하고 다시 시도해 주세요.</p>}
+    {busy && <p role="status" className="card text-sm text-violet-800">AI가 요리를 추천하고 있어요. 잠시만 기다려 주세요.</p>}
     {currentResult && <QuickRecipeResults recipes={currentResult.recipes} onRecipe={(recipe) => setDetail({ recipe, mode: 'detail' })} onPrepare={(recipe) => setDetail({ recipe, mode: 'prepare' })} />}
     {showStockIn && <StockInDialog onClose={() => setShowStockIn(false)} onSuccess={() => { setShowStockIn(false); setMessage('실제 냉장고에 등록했습니다. 갱신된 목록에서 재료를 선택해 주세요.') }} />}
   </div>
