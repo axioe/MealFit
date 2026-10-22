@@ -11,7 +11,7 @@ test('기본 즐겨찾기는 서버 저장 없이 등록 기본값만 제공한�
   assert.ok(defaultFavorites.every((item) => Number(item.quantity) > 0 && item.unit && item.ingredientName))
   assert.throws(() => { defaultFavorites[0].quantity = '999' }, TypeError)
 })
-test('연동 준비 입력은 선택 로트·원래 단위·인분·시간을 보존하고 원본을 변경하지 않는다', () => {
+test('연동 준비 입력은 선택 묶음·원래 단위·인분·시간을 보존하고 원본을 변경하지 않는다', () => {
   const groups = [group('양파', '4', '개')]
   const before = JSON.stringify(groups)
   assert.deepEqual(prepareQuickCookingInput(groups, { servings: '2', maxCookTimeMin: '15' }), { servings: 2, maxCookTimeMin: 15, ingredients: [{ ingredientName: '양파', quantity: '4', unit: '개', lotIds: [9] }] })

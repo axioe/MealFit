@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Clock, RefreshCw } from 'lucide-react'
+import { ServerCookingActions } from './ServerCookingActions'
+import { cookingBody } from '@/api/cookingUsage'
 import { ActualIngredientsEditor } from './ActualIngredientsEditor'
 import { analyzeUsage } from '@/api/actualUsage'
-import { quickCookingAvailability, quickUsageBaseline, prepareQuickUsageDraft } from '@/api/quickCookingService'
+import { quickUsageBaseline, prepareQuickUsageDraft } from '@/api/quickCookingService'
 import { formatQuantity } from '@/lib/format'
 import { getErrorMessage } from '@/api/client'
 import { RECIPE_STOCK_LABEL } from '@/api/recipeInventory'
 
 export function QuickRecipeDetail({ recipe, initialMode, inventory, onBack }) {
   const title = useRef(null)
+  const [locked, setLocked] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [preparing, setPreparing] = useState(initialMode === 'prepare')
   const [session, setSession] = useState(() => {
     const baseline = quickUsageBaseline(recipe)
@@ -17,11 +21,12 @@ export function QuickRecipeDetail({ recipe, initialMode, inventory, onBack }) {
   const ready = Boolean(inventory.data) && !inventory.isFetching && !inventory.isError
   const analysis = analyzeUsage(session.rows, session.baseline, inventory.data, ready)
   const draft = prepareQuickUsageDraft(recipe, session.rows, analysis)
-  const availability = quickCookingAvailability()
+  let body = null, inputError = ''
+  try { body = cookingBody('ingredients', { recipeName: recipe.name, servings: recipe.servings }, session.rows) } catch (failure) { inputError = failure.message }
   const originalAnalysis = analyzeUsage(session.baseline, session.baseline, inventory.data, ready)
   useEffect(() => { title.current?.focus({ preventScroll: true }); title.current?.scrollIntoView({ block: 'start' }) }, [])
   return <div className="space-y-5">
-    <button type="button" onClick={onBack} className="btn-secondary min-h-11"><ArrowLeft aria-hidden="true" className="h-4 w-4" />15분 추천 목록으로 돌아가기</button>
+    <button type="button" disabled={busy} onClick={onBack} className="btn-secondary min-h-11"><ArrowLeft aria-hidden="true" className="h-4 w-4" />15분 추천 목록으로 돌아가기</button>
     <section className="card min-w-0 space-y-4">
       <span className="inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-900">개발용 mock · 실제 AI 추천 아님</span>
       <h2 ref={title} tabIndex={-1} className="scroll-mt-24 break-all text-2xl font-extrabold focus-visible:outline-emerald-600">{recipe.name}</h2>
@@ -42,7 +47,8 @@ export function QuickRecipeDetail({ recipe, initialMode, inventory, onBack }) {
       })}</ul>
     </section>
     <section className="card space-y-4" aria-label="15분 요리 조리 순서"><h3 className="font-extrabold">단계별 조리법</h3>{recipe.steps.length ? <ol className="space-y-3">{recipe.steps.map((step, index) => <li key={index} className="flex items-start gap-3 rounded-xl bg-gray-50 p-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-800">{index + 1}</span><p className="min-w-0 whitespace-pre-wrap break-all text-sm leading-7">{step}</p></li>)}</ol> : <p className="text-sm text-gray-500">제공된 조리 순서가 없어요.</p>}</section>
-    {preparing && <ActualIngredientsEditor session={session} analysis={analysis} inventoryReady={ready} disabled={inventory.isFetching} preparedDraft={draft} onRowsChange={(rows) => setSession({ ...session, rows })} onReset={() => setSession({ ...session, rows: session.baseline.map((row) => ({ ...row })), notice: '레시피 기준으로 되돌렸어요.' })} />}
-    {preparing && <section aria-label="15분 요리 준비 요약" className="card space-y-3"><h3 className="font-extrabold">최종 사용 재료 · 임시 입력</h3><ul className="space-y-2 text-sm">{session.rows.filter((row) => row.enabled).map((row) => <li key={row.key} className="break-all">{row.ingredientName} · {row.quantity || '수량 입력 필요'}{row.quantity ? row.unit : ''}</li>)}</ul>{analysis.empty && <p className="text-sm text-rose-700">사용할 재료가 없어요.</p>}<p className="text-sm leading-7 text-amber-900">{availability.message}</p><button type="button" disabled={!availability.canComplete} className="btn-primary min-h-11">요리 완료 · 준비 중</button><p className="text-xs leading-6 text-gray-500">입력만 확인하며 냉장고 수량이나 조리 기록은 변경하지 않아요.</p></section>}
+    {preparing && <ActualIngredientsEditor session={session} analysis={analysis} inventoryReady={ready} disabled={locked || inventory.isFetching} actualUsageSupported preparedDraft={draft} onRowsChange={(rows) => setSession({ ...session, rows })} onReset={() => setSession({ ...session, rows: session.baseline.map((row) => ({ ...row })), notice: '레시피 기준으로 되돌렸어요.' })} />}
+    {preparing && <section aria-label="15분 요리 준비 요약" className="card space-y-4"><h3 className="font-extrabold">실제 사용량 확인 및 조리</h3><p className="text-xs leading-6 text-amber-900">추천은 개발용 mock이지만, 아래 완료를 확정하면 실제 냉장고에서 재료가 차감돼요. 서버 미리보기를 먼저 확인해 주세요.</p>{recipe.servings == null && <p className="text-xs text-gray-500">인분 정보가 없어 서버 기본 1인분으로 기록해요. 입력 수량은 인분에 따라 환산하지 않아요.</p>}<ServerCookingActions mode="ingredients" body={body} inputError={inputError || (Object.keys(analysis.errors).length ? '입력값과 사용 가능한 재고를 확인해 주세요.' : '')} inventory={inventory} onLockChange={setLocked} onBusyChange={setBusy} /></section>}
+
   </div>
 }
