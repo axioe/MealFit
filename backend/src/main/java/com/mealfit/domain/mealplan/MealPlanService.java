@@ -17,6 +17,7 @@ import com.mealfit.domain.recipe.RecipeRepository;
 import com.mealfit.domain.recipe.RecipeSource;
 import com.mealfit.domain.shopping.ShoppingListService;
 import com.mealfit.domain.shopping.dto.ShoppingItemResponse;
+import com.mealfit.domain.user.repository.UserRepository;
 import com.mealfit.global.exception.BusinessException;
 import com.mealfit.global.exception.ErrorCode;
 import jakarta.persistence.EntityManager;
@@ -63,6 +64,7 @@ public class MealPlanService {
     private final ShoppingListService shoppingListService;
     private final CookingEventRepository cookingEventRepository;
     private final EntityManager entityManager;
+    private final UserRepository userRepository;
 
     /** 날짜별 식단 조회. 취소된 식단은 빼고 아침·점심·저녁 순서로 돌려준다. */
     public MealPlanRecommendResponse getByDate(Long userId, LocalDate planDate) {
@@ -204,6 +206,10 @@ public class MealPlanService {
      * 그래서 잠근 뒤 영속성 컨텍스트를 비우고 한 번 더 읽어 최신 상태를 쓴다.
      */
     private List<MealPlan> lockDate(Long userId, LocalDate planDate) {
+        // 첫 추천도 회원 잠금으로 순서대로 처리한다.
+        userRepository.findByIdForUpdate(userId)
+                .filter(user -> user.getDeletedAt() == null)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
         mealPlanRepository.findForUpdateByDate(userId, planDate, MealPlanStatus.CANCELED);
         entityManager.clear();
         return mealPlanRepository.findForUpdateByDate(userId, planDate, MealPlanStatus.CANCELED);
