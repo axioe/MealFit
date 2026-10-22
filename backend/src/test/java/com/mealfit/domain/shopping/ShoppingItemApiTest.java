@@ -1,5 +1,7 @@
 package com.mealfit.domain.shopping;
 
+import com.mealfit.support.TestJwt;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -93,7 +95,7 @@ class ShoppingItemApiTest {
     }
 
     private Long itemId(String name) throws Exception {
-        mockMvc.perform(get("/api/v1/shopping-items")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/shopping-items").with(TestJwt.user(1L))).andExpect(status().isOk());
         return shoppingItemRepository.findByUserIdOrderByIdAsc(USER).stream()
                 .filter(item -> item.getIngredientName().equals(name))
                 .findFirst().orElseThrow()
@@ -101,13 +103,13 @@ class ShoppingItemApiTest {
     }
 
     private ResultActions purchase(Long id, String qty) throws Exception {
-        return mockMvc.perform(patch("/api/v1/shopping-items")
+        return mockMvc.perform(patch("/api/v1/shopping-items").with(TestJwt.user(1L))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"items\":[{\"id\":" + id + ",\"purchasedQty\":" + qty + "}]}"));
     }
 
     private ResultActions stockIn(String itemsJson) throws Exception {
-        return mockMvc.perform(post("/api/v1/shopping-items/stock-in")
+        return mockMvc.perform(post("/api/v1/shopping-items/stock-in").with(TestJwt.user(1L))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"items\":[" + itemsJson + "]}"));
     }
@@ -128,7 +130,7 @@ class ShoppingItemApiTest {
 
     @Test
     void 확정_식단의_부족분을_조회한다() throws Exception {
-        mockMvc.perform(get("/api/v1/shopping-items"))
+        mockMvc.perform(get("/api/v1/shopping-items").with(TestJwt.user(1L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].ingredientName").value("달걀"))
@@ -148,7 +150,7 @@ class ShoppingItemApiTest {
                 .userId(USER).ingredientName("달걀").quantity(new BigDecimal("4")).unit("개")
                 .storageLocation(StorageLocation.FRIDGE).build());
 
-        mockMvc.perform(get("/api/v1/shopping-items"))
+        mockMvc.perform(get("/api/v1/shopping-items").with(TestJwt.user(1L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].ingredientName").value("우유"));
@@ -180,12 +182,12 @@ class ShoppingItemApiTest {
         purchase(id, "-1")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("COMMON_400"));
-        mockMvc.perform(patch("/api/v1/shopping-items").header("X-User-Id", "2")
+        mockMvc.perform(patch("/api/v1/shopping-items").with(TestJwt.user(2L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"items\":[{\"id\":" + id + ",\"purchasedQty\":1}]}"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("SHOPPING_001"));
-        mockMvc.perform(patch("/api/v1/shopping-items")
+        mockMvc.perform(patch("/api/v1/shopping-items").with(TestJwt.user(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"items\":[{\"id\":" + id + ",\"purchasedQty\":1},{\"id\":" + id
                                 + ",\"purchasedQty\":2}]}"))

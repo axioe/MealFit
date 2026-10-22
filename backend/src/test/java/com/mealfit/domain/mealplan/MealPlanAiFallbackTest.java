@@ -1,5 +1,7 @@
 package com.mealfit.domain.mealplan;
 
+import com.mealfit.support.TestJwt;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -66,7 +68,7 @@ class MealPlanAiFallbackTest {
     }
 
     private ResultActions recommend() throws Exception {
-        return mockMvc.perform(post("/api/v1/meal-plans/recommend")
+        return mockMvc.perform(post("/api/v1/meal-plans/recommend").with(TestJwt.user(1L))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"planDate\":\"" + DATE + "\"}"));
     }

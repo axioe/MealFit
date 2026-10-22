@@ -1,5 +1,7 @@
 package com.mealfit.domain.mealplan;
 
+import com.mealfit.support.TestJwt;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -51,7 +53,7 @@ class MealPlanRecommendTest {
     private EntityManager entityManager;
 
     private ResultActions recommend(LocalDate date) throws Exception {
-        return mockMvc.perform(post("/api/v1/meal-plans/recommend")
+        return mockMvc.perform(post("/api/v1/meal-plans/recommend").with(TestJwt.user(1L))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"planDate\":\"" + date + "\"}"));
     }
@@ -62,7 +64,7 @@ class MealPlanRecommendTest {
     }
 
     private JsonNode regenerate(long id) throws Exception {
-        String body = mockMvc.perform(post("/api/v1/meal-plans/{id}/regenerate", id))
+        String body = mockMvc.perform(post("/api/v1/meal-plans/{id}/regenerate", id).with(TestJwt.user(1L)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body);
@@ -161,7 +163,7 @@ class MealPlanRecommendTest {
         breakfast.confirm();
         entityManager.flush();
 
-        mockMvc.perform(post("/api/v1/meal-plans/{id}/regenerate", breakfast.getId()))
+        mockMvc.perform(post("/api/v1/meal-plans/{id}/regenerate", breakfast.getId()).with(TestJwt.user(1L)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("MEAL_PLAN_002"));
     }
@@ -170,14 +172,14 @@ class MealPlanRecommendTest {
     void 다른_사용자의_식단은_재추천할_수_없다() throws Exception {
         long breakfastId = recommendOk(DATE).get(0).get("id").asLong();
 
-        mockMvc.perform(post("/api/v1/meal-plans/{id}/regenerate", breakfastId).header("X-User-Id", "2"))
+        mockMvc.perform(post("/api/v1/meal-plans/{id}/regenerate", breakfastId).with(TestJwt.user(2L)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("MEAL_PLAN_001"));
     }
 
     @Test
     void 날짜가_없으면_400() throws Exception {
-        mockMvc.perform(post("/api/v1/meal-plans/recommend")
+        mockMvc.perform(post("/api/v1/meal-plans/recommend").with(TestJwt.user(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest())

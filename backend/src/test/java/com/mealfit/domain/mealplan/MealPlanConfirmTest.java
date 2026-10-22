@@ -1,5 +1,7 @@
 package com.mealfit.domain.mealplan;
 
+import com.mealfit.support.TestJwt;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -109,11 +111,11 @@ class MealPlanConfirmTest {
     }
 
     private ResultActions confirm(MealPlan plan) throws Exception {
-        return mockMvc.perform(post("/api/v1/meal-plans/{id}/confirm", plan.getId()));
+        return mockMvc.perform(post("/api/v1/meal-plans/{id}/confirm", plan.getId()).with(TestJwt.user(1L)));
     }
 
     private ResultActions cancel(MealPlan plan) throws Exception {
-        return mockMvc.perform(post("/api/v1/meal-plans/{id}/cancel", plan.getId()));
+        return mockMvc.perform(post("/api/v1/meal-plans/{id}/cancel", plan.getId()).with(TestJwt.user(1L)));
     }
 
     private List<ShoppingItem> shoppingItems() {
@@ -277,7 +279,7 @@ class MealPlanConfirmTest {
     void 다른_사용자의_식단은_확정할_수_없다() throws Exception {
         MealPlan plan = draft(MealType.LUNCH, 1, 1, "달걀", "1", "개");
 
-        mockMvc.perform(post("/api/v1/meal-plans/{id}/confirm", plan.getId()).header("X-User-Id", "2"))
+        mockMvc.perform(post("/api/v1/meal-plans/{id}/confirm", plan.getId()).with(TestJwt.user(2L)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("MEAL_PLAN_001"));
     }

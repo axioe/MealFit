@@ -1,3 +1,4 @@
+import { RequireAuth } from '@/routes/RequireAuth';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 const page = (load, name) => async () => ({ Component: (await load())[name] });
@@ -6,7 +7,9 @@ export const router = createBrowserRouter([
             { path: '/login', lazy: page(() => import('@/pages/LoginPage'), 'LoginPage') },
             { path: '/signup', lazy: page(() => import('@/pages/SignupPage'), 'SignupPage') },
         ] },
-    { element: <AppLayout />, children: [
+    // 공개 로그인 화면을 제외한 모든 업무 화면은 서버 인증 후 표시합니다.
+    { element: <RequireAuth />, children: [
+        { element: <AppLayout />, children: [
             { path: '/', element: <Navigate to="/dashboard" replace/> },
             { path: '/dashboard', lazy: page(() => import('@/pages/DashboardPage'), 'DashboardPage') },
             { path: '/recommend', lazy: page(() => import('@/pages/RecommendPage'), 'RecommendPage') },
@@ -18,5 +21,6 @@ export const router = createBrowserRouter([
             { path: '/weight', lazy: page(() => import('@/pages/WeightPage'), 'WeightPage') },
             { path: '/mypage', lazy: page(() => import('@/pages/MyPage'), 'MyPage') },
         ] },
+    ] },
     { path: '*', element: <Navigate to="/dashboard" replace/> },
 ]);

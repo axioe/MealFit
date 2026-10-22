@@ -1,5 +1,7 @@
 package com.mealfit.domain.recipe;
 
+import com.mealfit.support.TestJwt;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -46,7 +48,7 @@ class RecipeControllerTest {
     void 요청한_인분으로_재료량을_환산한다() throws Exception {
         Recipe recipe = saveRecipe(null);
 
-        mockMvc.perform(get("/api/v1/recipes/{id}", recipe.getId()).param("servings", "3"))
+        mockMvc.perform(get("/api/v1/recipes/{id}", recipe.getId()).with(TestJwt.user(1L)).param("servings", "3"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.servingSize").value(2))
                 .andExpect(jsonPath("$.servings").value(3))
@@ -64,7 +66,7 @@ class RecipeControllerTest {
     void 인분이_없으면_기준_인분() throws Exception {
         Recipe recipe = saveRecipe(null);
 
-        mockMvc.perform(get("/api/v1/recipes/{id}", recipe.getId()))
+        mockMvc.perform(get("/api/v1/recipes/{id}", recipe.getId()).with(TestJwt.user(1L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.servings").value(2))
                 .andExpect(jsonPath("$.ingredients[0].quantity").value(300.0));
@@ -74,7 +76,7 @@ class RecipeControllerTest {
     void 본인_레시피는_조회된다() throws Exception {
         Recipe recipe = saveRecipe(7L);
 
-        mockMvc.perform(get("/api/v1/recipes/{id}", recipe.getId()).header("X-User-Id", "7"))
+        mockMvc.perform(get("/api/v1/recipes/{id}", recipe.getId()).with(TestJwt.user(7L)))
                 .andExpect(status().isOk());
     }
 
@@ -82,14 +84,14 @@ class RecipeControllerTest {
     void 다른_사용자의_레시피는_404() throws Exception {
         Recipe recipe = saveRecipe(7L);
 
-        mockMvc.perform(get("/api/v1/recipes/{id}", recipe.getId()).header("X-User-Id", "8"))
+        mockMvc.perform(get("/api/v1/recipes/{id}", recipe.getId()).with(TestJwt.user(8L)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("RECIPE_001"));
     }
 
     @Test
     void 없는_레시피는_404() throws Exception {
-        mockMvc.perform(get("/api/v1/recipes/{id}", 999_999))
+        mockMvc.perform(get("/api/v1/recipes/{id}", 999_999).with(TestJwt.user(1L)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("RECIPE_001"));
     }
@@ -98,7 +100,7 @@ class RecipeControllerTest {
     void 인분이_1_미만이면_400() throws Exception {
         Recipe recipe = saveRecipe(null);
 
-        mockMvc.perform(get("/api/v1/recipes/{id}", recipe.getId()).param("servings", "0"))
+        mockMvc.perform(get("/api/v1/recipes/{id}", recipe.getId()).with(TestJwt.user(1L)).param("servings", "0"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("COMMON_400"));
     }

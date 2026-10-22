@@ -1,5 +1,7 @@
 package com.mealfit.domain.cooking;
 
+import com.mealfit.support.TestJwt;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -111,11 +113,11 @@ class CookingApiTest {
     }
 
     private ResultActions preview(MealPlan plan) throws Exception {
-        return mockMvc.perform(get("/api/v1/cooking/preview").param("mealPlanId", plan.getId().toString()));
+        return mockMvc.perform(get("/api/v1/cooking/preview").with(TestJwt.user(1L)).param("mealPlanId", plan.getId().toString()));
     }
 
     private ResultActions cook(MealPlan plan) throws Exception {
-        return mockMvc.perform(post("/api/v1/cooking-events")
+        return mockMvc.perform(post("/api/v1/cooking-events").with(TestJwt.user(1L))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"mealPlanId\":" + plan.getId() + "}"));
     }
@@ -126,7 +128,7 @@ class CookingApiTest {
     }
 
     private ResultActions cancel(long eventId) throws Exception {
-        return mockMvc.perform(post("/api/v1/cooking-events/{id}/cancel", eventId));
+        return mockMvc.perform(post("/api/v1/cooking-events/{id}/cancel", eventId).with(TestJwt.user(1L)));
     }
 
     private InventoryLot reload(InventoryLot lot) {
@@ -172,7 +174,7 @@ class CookingApiTest {
         assertThat(transactions).hasSize(1);
         assertThat(transactions.get(0).getType()).isEqualTo(InventoryTransactionType.COOK_DEDUCT);
         assertThat(transactions.get(0).getCookingEvent()).isNotNull();
-        mockMvc.perform(get("/api/v1/meal-plans").param("date", TODAY.toString()))
+        mockMvc.perform(get("/api/v1/meal-plans").with(TestJwt.user(1L)).param("date", TODAY.toString()))
                 .andExpect(jsonPath("$.mealPlans[0].cooked").value(true));
     }
 
@@ -281,7 +283,7 @@ class CookingApiTest {
         assertThat(restoredA.getQuantity()).isEqualByComparingTo("150");
         assertThat(restoredA.getStatus()).isEqualTo(LotStatus.ACTIVE);
         assertThat(reload(b).getQuantity()).isEqualByComparingTo("100");
-        mockMvc.perform(get("/api/v1/meal-plans").param("date", TODAY.toString()))
+        mockMvc.perform(get("/api/v1/meal-plans").with(TestJwt.user(1L)).param("date", TODAY.toString()))
                 .andExpect(jsonPath("$.mealPlans[0].cooked").value(false));
     }
 
@@ -307,7 +309,7 @@ class CookingApiTest {
         InventoryLot potato = lot("감자", "500", "g", null);
         long eventId = cookOk(plan);
 
-        mockMvc.perform(post("/api/v1/meal-plans/{id}/cancel", plan.getId()))
+        mockMvc.perform(post("/api/v1/meal-plans/{id}/cancel", plan.getId()).with(TestJwt.user(1L)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("MEAL_PLAN_007"));
         cancel(eventId).andExpect(status().isOk());
@@ -321,11 +323,11 @@ class CookingApiTest {
         lot("감자", "500", "g", null);
         long eventId = cookOk(plan);
 
-        mockMvc.perform(get("/api/v1/cooking/preview").param("mealPlanId", plan.getId().toString())
-                        .header("X-User-Id", "2"))
+        mockMvc.perform(get("/api/v1/cooking/preview").with(TestJwt.user(1L)).param("mealPlanId", plan.getId().toString())
+                        .with(TestJwt.user(2L)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("MEAL_PLAN_001"));
-        mockMvc.perform(post("/api/v1/cooking-events/{id}/cancel", eventId).header("X-User-Id", "2"))
+        mockMvc.perform(post("/api/v1/cooking-events/{id}/cancel", eventId).with(TestJwt.user(2L)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("COOKING_001"));
         assertThat(mealPlanRepository.findById(plan.getId()).orElseThrow().getStatus())
@@ -334,10 +336,10 @@ class CookingApiTest {
 
     @Test
     void 식단_id가_없으면_400() throws Exception {
-        mockMvc.perform(get("/api/v1/cooking/preview"))
+        mockMvc.perform(get("/api/v1/cooking/preview").with(TestJwt.user(1L)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("COMMON_400"));
-        mockMvc.perform(post("/api/v1/cooking-events").contentType(MediaType.APPLICATION_JSON).content("{}"))
+        mockMvc.perform(post("/api/v1/cooking-events").with(TestJwt.user(1L)).contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("COMMON_400"));
     }

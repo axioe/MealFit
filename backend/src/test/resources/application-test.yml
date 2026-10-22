@@ -7,3 +7,9 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+
+# 테스트 전용 공개 키입니다. 운영·로컬 JWT_SECRET과 무관하게 CI를 실행합니다.
+jwt:
+  secret: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+  access-token-ttl: 30m
+  refresh-token-ttl: 14d
