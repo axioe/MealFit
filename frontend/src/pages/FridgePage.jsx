@@ -146,9 +146,9 @@ function InventoryGroup({ group, onEdit, onDispose, onHistory }) {
           </section>
         )}
         {expiredLots.length > 0 && (
-          <section aria-label="소비기한 경과 묶음">
+          <section aria-label="유통기한 경과 묶음">
             <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold text-rose-700">
-              <TriangleAlert aria-hidden="true" className="h-4 w-4" />소비기한이 지난 묶음
+              <TriangleAlert aria-hidden="true" className="h-4 w-4" />유통기한이 지난 묶음
             </h4>
             <p className="mb-2 text-xs text-rose-700">사용 가능 수량에서 제외된 재고입니다.</p>
             <ul className="space-y-2">{expiredLots.map((lot) => <LotCard key={lot.id} lot={lot} onEdit={onEdit} onDispose={onDispose} onHistory={onHistory} />)}</ul>
