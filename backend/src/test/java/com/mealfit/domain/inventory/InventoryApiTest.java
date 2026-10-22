@@ -1,5 +1,7 @@
 package com.mealfit.domain.inventory;
 
+import com.mealfit.support.TestJwt;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
@@ -72,7 +74,7 @@ class InventoryApiTest {
         assertThat(lot.getQuantity()).isEqualByComparingTo("300.125");
         assertThat(lot.getMinStockQty()).isEqualByComparingTo("0");
         assertThat(lot.getStatus()).isEqualTo(LotStatus.ACTIVE);
-        mockMvc.perform(get(TRANSACTIONS))
+        mockMvc.perform(get(TRANSACTIONS).with(TestJwt.user(1L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].lotId").value(id))
                 .andExpect(jsonPath("$[0].type").value("STOCK_IN"))
@@ -81,8 +83,8 @@ class InventoryApiTest {
 
     @Test
     void emptyInventoryAndHistoryReturnEmptyLists() throws Exception {
-        mockMvc.perform(get(LOTS)).andExpect(status().isOk()).andExpect(jsonPath("$.groups").isEmpty());
-        mockMvc.perform(get(TRANSACTIONS)).andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
+        mockMvc.perform(get(LOTS).with(TestJwt.user(1L))).andExpect(status().isOk()).andExpect(jsonPath("$.groups").isEmpty());
+        mockMvc.perform(get(TRANSACTIONS).with(TestJwt.user(1L))).andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
     }
 
     @Test
@@ -93,7 +95,7 @@ class InventoryApiTest {
         createLot(1, "두부", "50", "g", today);
         createLot(1, "두부", "1", "kg", null);
         createLot(2, "두부", "999", "g", null);
-        JsonNode response = read(mockMvc.perform(get(LOTS)).andExpect(status().isOk()));
+        JsonNode response = read(mockMvc.perform(get(LOTS).with(TestJwt.user(1L))).andExpect(status().isOk()));
         assertThat(response.path("groups").size()).isEqualTo(2);
         JsonNode grams = null;
         for (JsonNode group : response.path("groups")) {
@@ -119,7 +121,7 @@ class InventoryApiTest {
                 .andExpect(jsonPath("$.storageLocation").value("FREEZER"))
                 .andExpect(jsonPath("$.expiryDate").value("2027-01-01"))
                 .andExpect(jsonPath("$.status").value("ACTIVE"));
-        mockMvc.perform(get(TRANSACTIONS).param("lotId", String.valueOf(id)))
+        mockMvc.perform(get(TRANSACTIONS).with(TestJwt.user(1L)).param("lotId", String.valueOf(id)))
                 .andExpect(jsonPath("$[0].type").value("ADJUST"))
                 .andExpect(jsonPath("$[0].qtyChange").value(-174.5));
         assertThat(transactionRepository.count()).isEqualTo(2);
@@ -131,7 +133,7 @@ class InventoryApiTest {
         update(1, id, """ 
                 {"action":"ADJUST","quantity":120.001}
                 """).andExpect(status().isOk());
-        mockMvc.perform(get(TRANSACTIONS))
+        mockMvc.perform(get(TRANSACTIONS).with(TestJwt.user(1L)))
                 .andExpect(jsonPath("$[0].qtyChange").value(20.001));
     }
 
@@ -164,12 +166,12 @@ class InventoryApiTest {
                 .andExpect(jsonPath("$.quantity").value(0))
                 .andExpect(jsonPath("$.status").value("DISPOSED"));
         assertThat(lotRepository.existsById(id)).isTrue();
-        mockMvc.perform(get(TRANSACTIONS).param("lotId", String.valueOf(id)))
+        mockMvc.perform(get(TRANSACTIONS).with(TestJwt.user(1L)).param("lotId", String.valueOf(id)))
                 .andExpect(jsonPath("$.length()").value(3))
                 .andExpect(jsonPath("$[0].type").value("DISPOSE"))
                 .andExpect(jsonPath("$[0].qtyChange").value(-70))
                 .andExpect(jsonPath("$[1].qtyChange").value(-30));
-        mockMvc.perform(get(LOTS))
+        mockMvc.perform(get(LOTS).with(TestJwt.user(1L)))
                 .andExpect(jsonPath("$.groups[0].totalQuantity").value(0))
                 .andExpect(jsonPath("$.groups[0].lots[0].status").value("DISPOSED"));
     }
@@ -182,7 +184,7 @@ class InventoryApiTest {
                 """).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("DEPLETED"));
         long nextId = createLot(1, "두부", "50", "g", null);
         assertThat(nextId).isNotEqualTo(id);
-        mockMvc.perform(get(LOTS))
+        mockMvc.perform(get(LOTS).with(TestJwt.user(1L)))
                 .andExpect(jsonPath("$.groups[0].lots.length()").value(2))
                 .andExpect(jsonPath("$.groups[0].totalQuantity").value(50));
     }
@@ -233,7 +235,7 @@ class InventoryApiTest {
     @ParameterizedTest
     @ValueSource(strings = {"0", "-1", "0.0001", "1000000000", "null"})
     void invalidStockQuantityDoesNotCreateLot(String quantity) throws Exception {
-        mockMvc.perform(post(LOTS).contentType(MediaType.APPLICATION_JSON).content(
+        mockMvc.perform(post(LOTS).with(TestJwt.user(1L)).contentType(MediaType.APPLICATION_JSON).content(
                 "{\"ingredientName\":\"두부\",\"quantity\":" + quantity
                         + ",\"unit\":\"g\",\"storageLocation\":\"FRIDGE\"}"))
                 .andExpect(status().isBadRequest());
@@ -243,7 +245,7 @@ class InventoryApiTest {
 
     @Test
     void validatesRequiredFieldsAndMemoLength() throws Exception {
-        mockMvc.perform(post(LOTS).contentType(MediaType.APPLICATION_JSON).content("""
+        mockMvc.perform(post(LOTS).with(TestJwt.user(1L)).contentType(MediaType.APPLICATION_JSON).content("""
                 {"ingredientName":" ","quantity":1,"unit":"","minStockQty":-1}
                 """)).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors").isArray());
@@ -269,11 +271,11 @@ class InventoryApiTest {
         update(1, other, """
                 {"action":"ADJUST","quantity":0}
                 """).andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("INVENTORY_001"));
-        mockMvc.perform(get(TRANSACTIONS).param("lotId", String.valueOf(other)))
+        mockMvc.perform(get(TRANSACTIONS).with(TestJwt.user(1L)).param("lotId", String.valueOf(other)))
                 .andExpect(status().isNotFound());
-        mockMvc.perform(get(TRANSACTIONS)).andExpect(status().isOk())
+        mockMvc.perform(get(TRANSACTIONS).with(TestJwt.user(1L))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].lotId").value(mine));
-        mockMvc.perform(get(LOTS).header("X-User-Id", "2"))
+        mockMvc.perform(get(LOTS).with(TestJwt.user(2L)))
                 .andExpect(jsonPath("$.groups.length()").value(1))
                 .andExpect(jsonPath("$.groups[0].ingredientName").value("달걀"));
     }
@@ -283,7 +285,7 @@ class InventoryApiTest {
         update(1, Long.MAX_VALUE, """
                 {"action":"ADJUST","quantity":1}
                 """).andExpect(status().isNotFound());
-        mockMvc.perform(get(TRANSACTIONS).param("lotId", String.valueOf(Long.MAX_VALUE)))
+        mockMvc.perform(get(TRANSACTIONS).with(TestJwt.user(1L)).param("lotId", String.valueOf(Long.MAX_VALUE)))
                 .andExpect(status().isNotFound());
     }
 
@@ -291,7 +293,7 @@ class InventoryApiTest {
     void transactionFilterExcludesOtherLots() throws Exception {
         long first = createLot(1, "두부", "10", "g", null);
         createLot(1, "달걀", "2", "개", null);
-        mockMvc.perform(get(TRANSACTIONS).param("lotId", String.valueOf(first)))
+        mockMvc.perform(get(TRANSACTIONS).with(TestJwt.user(1L)).param("lotId", String.valueOf(first)))
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].lotId").value(first));
     }
@@ -304,7 +306,7 @@ class InventoryApiTest {
         for (int index = 0; index < dates.length; index++) {
             long id = createLot(1, "두부", "1", "g", dates[index]);
             String expected = statuses[index];
-            JsonNode response = read(mockMvc.perform(get(LOTS)));
+            JsonNode response = read(mockMvc.perform(get(LOTS).with(TestJwt.user(1L))));
             boolean found = false;
             for (JsonNode lot : response.path("groups").get(0).path("lots")) {
                 if (lot.path("id").asLong() == id) {
@@ -320,7 +322,7 @@ class InventoryApiTest {
     void stockInRollsBackWhenHistorySaveFails() throws Exception {
         doThrow(new IllegalStateException("이력 저장 실패")).when(transactionRepository)
                 .save(any(InventoryTransaction.class));
-        mockMvc.perform(post(LOTS).contentType(MediaType.APPLICATION_JSON).content("""
+        mockMvc.perform(post(LOTS).with(TestJwt.user(1L)).contentType(MediaType.APPLICATION_JSON).content("""
                 {"ingredientName":"두부","quantity":100,"unit":"g","storageLocation":"FRIDGE"}
                 """)).andExpect(status().isInternalServerError());
         assertThat(lotRepository.count()).isZero();
@@ -350,17 +352,17 @@ class InventoryApiTest {
     })
     void emptyAdjustRejectsWithoutChangingLotOrHistory(String body) throws Exception {
         long id = createLot(1, "두부", "100", "g", LocalDate.of(2027, 1, 1));
-        JsonNode inventoryBefore = read(mockMvc.perform(get(LOTS)).andExpect(status().isOk()));
-        JsonNode historyBefore = read(mockMvc.perform(get(TRANSACTIONS)).andExpect(status().isOk()));
+        JsonNode inventoryBefore = read(mockMvc.perform(get(LOTS).with(TestJwt.user(1L))).andExpect(status().isOk()));
+        JsonNode historyBefore = read(mockMvc.perform(get(TRANSACTIONS).with(TestJwt.user(1L))).andExpect(status().isOk()));
 
         update(1, id, body).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.code").value("INVENTORY_004"))
                 .andExpect(jsonPath("$.message").value("수정할 항목을 하나 이상 입력해 주세요."));
 
-        assertThat(read(mockMvc.perform(get(LOTS)).andExpect(status().isOk())))
+        assertThat(read(mockMvc.perform(get(LOTS).with(TestJwt.user(1L))).andExpect(status().isOk())))
                 .isEqualTo(inventoryBefore);
-        assertThat(read(mockMvc.perform(get(TRANSACTIONS)).andExpect(status().isOk())))
+        assertThat(read(mockMvc.perform(get(TRANSACTIONS).with(TestJwt.user(1L))).andExpect(status().isOk())))
                 .isEqualTo(historyBefore);
         assertThat(lotRepository.count()).isEqualTo(1);
         assertThat(transactionRepository.count()).isEqualTo(1);
@@ -401,21 +403,21 @@ class InventoryApiTest {
     @ValueSource(strings = {"0.0001", "1000000000", "-0.001"})
     void invalidDisposalPrecisionAndRangePreserveInventory(String quantity) throws Exception {
         long id = createLot(1, "경계값", "100", "g", null);
-        JsonNode before = read(mockMvc.perform(get(LOTS)));
+        JsonNode before = read(mockMvc.perform(get(LOTS).with(TestJwt.user(1L))));
         update(1, id, "{\"action\":\"DISPOSE\",\"quantity\":" + quantity + "}")
                 .andExpect(status().isBadRequest());
-        assertThat(read(mockMvc.perform(get(LOTS)))).isEqualTo(before);
+        assertThat(read(mockMvc.perform(get(LOTS).with(TestJwt.user(1L))))).isEqualTo(before);
         assertThat(transactionRepository.count()).isEqualTo(1);
     }
 
     @Test
     void unchangedAdjustmentDoesNotChangeInventoryOrHistory() throws Exception {
         long id = createLot(1, "경계값", "100", "g", null);
-        JsonNode before = read(mockMvc.perform(get(LOTS)));
+        JsonNode before = read(mockMvc.perform(get(LOTS).with(TestJwt.user(1L))));
         update(1, id, """
                 {"action":"ADJUST","quantity":100,"storageLocation":"FRIDGE","minStockQty":0}
                 """).andExpect(status().isOk());
-        assertThat(read(mockMvc.perform(get(LOTS)))).isEqualTo(before);
+        assertThat(read(mockMvc.perform(get(LOTS).with(TestJwt.user(1L))))).isEqualTo(before);
         assertThat(transactionRepository.count()).isEqualTo(1);
     }
 
@@ -451,8 +453,8 @@ class InventoryApiTest {
     @ValueSource(strings = {"ADJUST", "DISPOSE"})
     void flushedLotAndHistoryRollBackTogether(String action) throws Exception {
         long id = createLot(1, "롤백 검증", "100", "g", LocalDate.of(2027, 1, 1));
-        JsonNode before = read(mockMvc.perform(get(LOTS)));
-        JsonNode history = read(mockMvc.perform(get(TRANSACTIONS)));
+        JsonNode before = read(mockMvc.perform(get(LOTS).with(TestJwt.user(1L))));
+        JsonNode history = read(mockMvc.perform(get(TRANSACTIONS).with(TestJwt.user(1L))));
         // SQL 반영 이후 실패해도 재고와 이력을 함께 되돌린다.
         doAnswer(invocation -> {
             entityManager.persist(invocation.getArgument(0, InventoryTransaction.class));
@@ -468,8 +470,8 @@ class InventoryApiTest {
                   {"action":"DISPOSE","quantity":100,"memo":"실패할 폐기"}
                   """;
         update(1, id, body).andExpect(status().isInternalServerError());
-        assertThat(read(mockMvc.perform(get(LOTS)))).isEqualTo(before);
-        assertThat(read(mockMvc.perform(get(TRANSACTIONS)))).isEqualTo(history);
+        assertThat(read(mockMvc.perform(get(LOTS).with(TestJwt.user(1L))))).isEqualTo(before);
+        assertThat(read(mockMvc.perform(get(TRANSACTIONS).with(TestJwt.user(1L))))).isEqualTo(history);
     }
 
     @Test
@@ -547,13 +549,13 @@ class InventoryApiTest {
     private long createLot(long userId, String name, String quantity, String unit, LocalDate expiry) throws Exception {
         String body = objectMapper.writeValueAsString(new StockBody(name, new BigDecimal(quantity), unit,
                 expiry, "FRIDGE"));
-        return read(mockMvc.perform(post(LOTS).header("X-User-Id", userId)
+        return read(mockMvc.perform(post(LOTS).with(TestJwt.user(userId))
                 .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated())).path("id").asLong();
     }
 
     private ResultActions update(long userId, long id, String body) throws Exception {
-        return mockMvc.perform(patch(LOTS + "/" + id).header("X-User-Id", userId)
+        return mockMvc.perform(patch(LOTS + "/" + id).with(TestJwt.user(userId))
                 .contentType(MediaType.APPLICATION_JSON).content(body));
     }
 

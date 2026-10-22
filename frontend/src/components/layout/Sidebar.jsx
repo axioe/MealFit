@@ -1,8 +1,30 @@
+import { useLogout } from '@/api/auth';
+import { useAuthStore } from '@/stores/authStore';
 import { NAV_ITEMS } from '@/components/layout/navItems';
-import React from 'react';
-import { NavLink } from 'react-router-dom';
+import React, { useRef } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { LogOut, Sparkles } from 'lucide-react';
-export function Sidebar({ user = {}, profile = {} } = {}) {
+export function Sidebar({ user: providedUser = {}, profile = {} } = {}) {
+    const logout = useLogout();
+    const navigate = useNavigate();
+    const logoutLock = useRef(false);
+    const sessionUser = useAuthStore((state) => state.user);
+    const user = providedUser.id ? providedUser : (sessionUser ?? {});
+
+    /** 서버 토큰 폐기와 로컬 상태 정리가 끝나면 로그인 화면으로 이동합니다. */
+    function handleLogout() {
+        if (logoutLock.current || logout.isPending) return;
+        logoutLock.current = true;
+
+        logout.mutate(undefined, {
+            // 서버 응답이 실패해도 useLogout이 로컬 로그인 정보는 정리합니다.
+            onSettled: () => {
+                logoutLock.current = false;
+                navigate('/login', { replace: true, state: null });
+            },
+        });
+    }
+
     return (<aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-200 min-h-screen p-4 sticky top-0 h-screen select-none">
       {/* Brand Header */}
       <div className="flex items-center gap-3 px-3 py-4 mb-4 border-b border-gray-100">
@@ -42,14 +64,14 @@ export function Sidebar({ user = {}, profile = {} } = {}) {
       <div className="pt-3 border-t border-gray-100 flex items-center justify-between px-2">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs shrink-0">
-            {profile?.nickname?.[0] || user?.name?.[0] || 'M'}
+            {profile?.nickname?.[0] || user?.nickname?.[0] || user?.name?.[0] || 'M'}
           </div>
           <div className="min-w-0">
-            <p className="text-xs font-semibold text-gray-800 truncate">{profile?.nickname || user?.name || '회원'}</p>
+            <p className="text-xs font-semibold text-gray-800 truncate">{profile?.nickname || user?.nickname || user?.name || '회원'}</p>
             <p className="text-[11px] text-gray-400 truncate">{user?.email}</p>
           </div>
         </div>
-        <button title="로그아웃" className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer" disabled>
+        <button type="button" title={logout.isPending ? "로그아웃 중..." : "로그아웃"} aria-label="로그아웃" onClick={handleLogout} disabled={logout.isPending} className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50 min-h-11 min-w-11 flex items-center justify-center">
           <LogOut className="w-4 h-4"/>
         </button>
       </div>

@@ -1,7 +1,30 @@
-import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useLogout } from '@/api/auth';
+import { useAuthStore } from '@/stores/authStore';
+import React, { useRef, useState } from 'react';
 import { AlertTriangle, Award, CheckCircle2, Clock, Dumbbell, LogOut, Scale, Shield, Sparkles, Target, User, Utensils, Zap } from 'lucide-react';
 import { DIET_TYPE_OPTIONS, EQUIPMENT_OPTIONS, INJURY_AREA_OPTIONS } from "@/lib/profileOptions";
-export function MyPage({ user = {}, profile = {} } = {}) {
+export function MyPage({ user: providedUser = {}, profile = {} } = {}) {
+    const logout = useLogout();
+    const navigate = useNavigate();
+    const logoutLock = useRef(false);
+    const sessionUser = useAuthStore((state) => state.user);
+    const user = providedUser.id ? providedUser : (sessionUser ?? {});
+
+    /** 서버 토큰 폐기와 로컬 상태 정리가 끝나면 로그인 화면으로 이동합니다. */
+    function handleLogout() {
+        if (logoutLock.current || logout.isPending) return;
+        logoutLock.current = true;
+
+        logout.mutate(undefined, {
+            // 서버 응답이 실패해도 useLogout이 로컬 로그인 정보는 정리합니다.
+            onSettled: () => {
+                logoutLock.current = false;
+                navigate('/login', { replace: true, state: null });
+            },
+        });
+    }
+
     const [activeTab, setActiveTab] = useState('trainer');
     const isSaving = false;
     const [trainerAge, setTrainerAge] = useState("");
@@ -61,10 +84,10 @@ export function MyPage({ user = {}, profile = {} } = {}) {
       <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-xs mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-800 font-black text-xl flex items-center justify-center">
-            {profile?.nickname?.[0] || user?.name?.[0] || 'M'}
+            {profile?.nickname?.[0] || user?.nickname?.[0] || user?.name?.[0] || 'M'}
           </div>
           <div>
-            <h3 className="font-extrabold text-lg text-gray-900">{profile?.nickname || user?.name || '프로필'}</h3>
+            <h3 className="font-extrabold text-lg text-gray-900">{profile?.nickname || user?.nickname || user?.name || '프로필'}</h3>
             <p className="text-xs text-gray-500">{user?.email}</p>
             <p className="text-xs text-emerald-700 font-semibold mt-1">
               키 {trainerHeight || profile?.height}cm • 체중 {trainerWeight || profile?.currentWeight}kg • 목표 {profile?.targetWeight ?? '—'}kg
@@ -72,9 +95,9 @@ export function MyPage({ user = {}, profile = {} } = {}) {
           </div>
         </div>
 
-        <button className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold flex items-center gap-1.5 self-start sm:self-auto cursor-pointer min-h-[44px]" disabled>
+        <button type="button" onClick={handleLogout} disabled={logout.isPending} className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold flex items-center gap-1.5 self-start sm:self-auto cursor-pointer min-h-[44px] disabled:opacity-50">
           <LogOut className="w-4 h-4"/>
-          <span>로그아웃</span>
+          <span>{logout.isPending ? "로그아웃 중..." : "로그아웃"}</span>
         </button>
       </div>
 
