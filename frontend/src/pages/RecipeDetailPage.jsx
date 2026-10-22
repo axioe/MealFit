@@ -394,6 +394,7 @@ function RecipeContent({
           </section>
 
           <CookingPanel
+            ingredients={data.ingredients ?? []}
             inventory={inventory}
             usageScope={String(requestedServings ?? data.servings)}
             focusCooking={focusCooking}
