@@ -11,7 +11,8 @@ import java.util.List;
 /**
  * 조리 기록과 재고 변경 내역.
  *
- * @param changes 이번 요청으로 바뀐 재고 (차감은 -, 복원은 +)
+ * @param mealPlanId 식단 없이 재료 목록만으로 조리했으면 null
+ * @param changes    이번 요청으로 바뀐 재고 (차감은 -, 복원은 +)
  */
 public record CookingEventResponse(
         Long id,
@@ -34,7 +35,8 @@ public record CookingEventResponse(
     }
 
     public static CookingEventResponse of(CookingEvent event, List<InventoryTransaction> transactions) {
-        return new CookingEventResponse(event.getId(), event.getMealPlan().getId(), event.getRecipe().getName(),
+        Long mealPlanId = event.getMealPlan() == null ? null : event.getMealPlan().getId();
+        return new CookingEventResponse(event.getId(), mealPlanId, event.getRecipeName(),
                 event.getServings(), event.getStatus(), event.getCookedAt(), event.getRestoredAt(),
                 transactions.stream().map(Change::from).toList());
     }

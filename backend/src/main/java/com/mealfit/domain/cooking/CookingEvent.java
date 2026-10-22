@@ -32,13 +32,23 @@ public class CookingEvent extends BaseTimeEntity {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    /** 식단 기반 조리만 채운다. 식단 없는 조리(15분 요리 등)는 null */
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "recipe_id")
     private Recipe recipe;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    /** 식단 기반 조리만 채운다. 식단 없는 조리(15분 요리 등)는 null */
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "meal_plan_id")
     private MealPlan mealPlan;
+
+    /** 조리 당시 메뉴 이름. 레시피가 없는 조리도 기록과 이력 메모에 쓴다. */
+    @Column(name = "recipe_name", nullable = false, length = 100)
+    private String recipeName;
+
+    /** 식단 없는 조리의 중복 요청 방지 키 (사용자별 유일) */
+    @Column(name = "client_request_id", length = 36)
+    private String clientRequestId;
 
     @Column(nullable = false)
     private int servings;
@@ -58,6 +68,19 @@ public class CookingEvent extends BaseTimeEntity {
         event.userId = userId;
         event.mealPlan = mealPlan;
         event.recipe = mealPlan.getRecipe();
+        event.recipeName = mealPlan.getRecipe().getName();
+        event.servings = servings;
+        event.status = CookingStatus.COOKED;
+        event.cookedAt = LocalDateTime.now();
+        return event;
+    }
+
+    /** 식단 없이 재료 목록만으로 조리한 기록 */
+    public static CookingEvent cookedWithoutPlan(Long userId, String recipeName, int servings, String clientRequestId) {
+        CookingEvent event = new CookingEvent();
+        event.userId = userId;
+        event.recipeName = recipeName;
+        event.clientRequestId = clientRequestId;
         event.servings = servings;
         event.status = CookingStatus.COOKED;
         event.cookedAt = LocalDateTime.now();

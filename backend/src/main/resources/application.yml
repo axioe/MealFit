@@ -46,3 +46,13 @@ management:
     web:
       exposure:
         include: health,info
+
+jwt:
+  # Base64로 인코딩한 서명 키입니다. 실제 값은 .env에서 읽습니다.
+  secret: ${JWT_SECRET}
+
+  # Access Token 유효기간: 30분
+  access-token-ttl: 30m
+
+  # Refresh Token 유효기간: 14일
+  refresh-token-ttl: 14d

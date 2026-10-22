@@ -19,6 +19,7 @@ import com.mealfit.domain.shopping.ShoppingListService;
 import com.mealfit.domain.shopping.dto.ShoppingItemResponse;
 import com.mealfit.global.exception.BusinessException;
 import com.mealfit.global.exception.ErrorCode;
+import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -61,6 +62,7 @@ public class MealPlanService {
     private final ObjectProvider<UserDietProfileProvider> profileProvider;
     private final ShoppingListService shoppingListService;
     private final CookingEventRepository cookingEventRepository;
+    private final EntityManager entityManager;
 
     /** 날짜별 식단 조회. 취소된 식단은 빼고 아침·점심·저녁 순서로 돌려준다. */
     public MealPlanRecommendResponse getByDate(Long userId, LocalDate planDate) {
@@ -76,12 +78,12 @@ public class MealPlanService {
     /**
      * 하루 세 끼 추천. 같은 날짜로 다시 부르면 전체 재추천이다:
      * 기존 초안은 취소하고, 이미 확정된 끼니는 그대로 두고 나머지 끼니만 새로 만든다.
+     * 그 날짜의 식단을 잠가서, 재추천이 동시에 들어와도 살아 있는 초안이 끼니마다 하나만 남게 한다 (D06).
      */
     @Transactional
     public MealPlanRecommendResponse recommend(Long userId, MealPlanRecommendRequest request) {
         LocalDate planDate = request.planDate();
-        List<MealPlan> existing = mealPlanRepository.findByUserIdAndPlanDateAndStatusNot(
-                userId, planDate, MealPlanStatus.CANCELED);
+        List<MealPlan> existing = lockDate(userId, planDate);
         List<MealPlan> confirmed = existing.stream()
                 .filter(plan -> plan.getStatus() == MealPlanStatus.CONFIRMED)
                 .toList();
@@ -112,7 +114,7 @@ public class MealPlanService {
     /** 한 끼 재추천. 초안만 가능하며, 같은 날 다른 끼니는 바꾸지 않는다. */
     @Transactional
     public MealPlanResponse regenerate(Long userId, Long mealPlanId) {
-        MealPlan plan = findPlan(userId, mealPlanId);
+        MealPlan plan = lockPlan(userId, mealPlanId);
         if (plan.getStatus() != MealPlanStatus.DRAFT) {
             throw new BusinessException(ErrorCode.MEAL_PLAN_NOT_DRAFT);
         }
@@ -133,7 +135,7 @@ public class MealPlanService {
      */
     @Transactional
     public MealPlanConfirmResponse confirm(Long userId, Long mealPlanId) {
-        MealPlan plan = findPlan(userId, mealPlanId);
+        MealPlan plan = lockPlan(userId, mealPlanId);
         plan.getStatus().validateTransition(MealPlanStatus.CONFIRMED);
         Recipe recipe = plan.getRecipe();
 
@@ -168,7 +170,7 @@ public class MealPlanService {
      */
     @Transactional
     public MealPlanResponse cancel(Long userId, Long mealPlanId) {
-        MealPlan plan = findPlan(userId, mealPlanId);
+        MealPlan plan = lockPlan(userId, mealPlanId);
         if (cookingEventRepository.existsByMealPlanIdAndStatus(plan.getId(), CookingStatus.COOKED)) {
             throw new BusinessException(ErrorCode.MEAL_PLAN_ALREADY_COOKED);
         }
@@ -187,9 +189,24 @@ public class MealPlanService {
         return MealPlanResponse.from(plan, cooked);
     }
 
-    private MealPlan findPlan(Long userId, Long mealPlanId) {
-        return mealPlanRepository.findByIdAndUserId(mealPlanId, userId)
+    /**
+     * 상태를 바꾸기 전에 식단을 잠근다. 조리(CookingService.cook)도 같은 식단을 잠그므로
+     * 확정·취소·재추천·조리가 동시에 들어와도 한 번에 하나씩 처리되고 상태 검사가 어긋나지 않는다 (BR-09, BR-13).
+     */
+    private MealPlan lockPlan(Long userId, Long mealPlanId) {
+        return mealPlanRepository.findForUpdate(mealPlanId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEAL_PLAN_NOT_FOUND));
+    }
+
+    /**
+     * 그 날짜의 살아 있는 식단을 잠근다. 다른 재추천이 먼저 잠갔다면 끝날 때까지 기다리는데,
+     * 기다린 조회 결과에는 그동안 취소된 초안이 남고 새로 만든 초안은 빠질 수 있다.
+     * 그래서 잠근 뒤 영속성 컨텍스트를 비우고 한 번 더 읽어 최신 상태를 쓴다.
+     */
+    private List<MealPlan> lockDate(Long userId, LocalDate planDate) {
+        mealPlanRepository.findForUpdateByDate(userId, planDate, MealPlanStatus.CANCELED);
+        entityManager.clear();
+        return mealPlanRepository.findForUpdateByDate(userId, planDate, MealPlanStatus.CANCELED);
     }
 
     /** 확정 전 데이터 무결성 검사: 재료·수량·단위 누락, 비정상 인분 */

@@ -1,5 +1,7 @@
 package com.mealfit.domain.cooking;
 
+import com.mealfit.support.TestJwt;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -111,13 +113,26 @@ class CookingApiTest {
     }
 
     private ResultActions preview(MealPlan plan) throws Exception {
-        return mockMvc.perform(get("/api/v1/cooking/preview").param("mealPlanId", plan.getId().toString()));
+        return mockMvc.perform(get("/api/v1/cooking/preview").with(TestJwt.user(1L)).param("mealPlanId", plan.getId().toString()));
     }
 
     private ResultActions cook(MealPlan plan) throws Exception {
-        return mockMvc.perform(post("/api/v1/cooking-events")
+        return mockMvc.perform(post("/api/v1/cooking-events").with(TestJwt.user(1L))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"mealPlanId\":" + plan.getId() + "}"));
+    }
+
+    /** ingredients: JSON 배열 문자열. 예: [{"ingredientName":"감자","quantity":100,"unit":"g"}] */
+    private ResultActions cook(MealPlan plan, String ingredients) throws Exception {
+        return mockMvc.perform(post("/api/v1/cooking-events").with(TestJwt.user(1L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mealPlanId\":" + plan.getId() + ",\"ingredients\":" + ingredients + "}"));
+    }
+
+    private ResultActions preview(MealPlan plan, String ingredients) throws Exception {
+        return mockMvc.perform(post("/api/v1/cooking/preview").with(TestJwt.user(1L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mealPlanId\":" + plan.getId() + ",\"ingredients\":" + ingredients + "}"));
     }
 
     private long cookOk(MealPlan plan) throws Exception {
@@ -126,7 +141,7 @@ class CookingApiTest {
     }
 
     private ResultActions cancel(long eventId) throws Exception {
-        return mockMvc.perform(post("/api/v1/cooking-events/{id}/cancel", eventId));
+        return mockMvc.perform(post("/api/v1/cooking-events/{id}/cancel", eventId).with(TestJwt.user(1L)));
     }
 
     private InventoryLot reload(InventoryLot lot) {
@@ -172,7 +187,7 @@ class CookingApiTest {
         assertThat(transactions).hasSize(1);
         assertThat(transactions.get(0).getType()).isEqualTo(InventoryTransactionType.COOK_DEDUCT);
         assertThat(transactions.get(0).getCookingEvent()).isNotNull();
-        mockMvc.perform(get("/api/v1/meal-plans").param("date", TODAY.toString()))
+        mockMvc.perform(get("/api/v1/meal-plans").with(TestJwt.user(1L)).param("date", TODAY.toString()))
                 .andExpect(jsonPath("$.mealPlans[0].cooked").value(true));
     }
 
@@ -281,8 +296,27 @@ class CookingApiTest {
         assertThat(restoredA.getQuantity()).isEqualByComparingTo("150");
         assertThat(restoredA.getStatus()).isEqualTo(LotStatus.ACTIVE);
         assertThat(reload(b).getQuantity()).isEqualByComparingTo("100");
-        mockMvc.perform(get("/api/v1/meal-plans").param("date", TODAY.toString()))
+        mockMvc.perform(get("/api/v1/meal-plans").with(TestJwt.user(1L)).param("date", TODAY.toString()))
                 .andExpect(jsonPath("$.mealPlans[0].cooked").value(false));
+    }
+
+    @Test
+    void 레시피_재료량이_바뀌어도_조리_당시_차감량만_복원한다() throws Exception {
+        // QA-13·FR-COOK-03: 조리 후 레시피를 200g → 50g으로 바꿔도 복원은 200g
+        MealPlan plan = confirmedPlan(1, "감자", "200", "g");
+        InventoryLot potato = lot("감자", "500", "g", null);
+        long eventId = cookOk(plan);
+        entityManager.createQuery("update RecipeIngredient ingredient set ingredient.requiredQty = :qty "
+                        + "where ingredient.recipe = :recipe")
+                .setParameter("qty", new BigDecimal("50"))
+                .setParameter("recipe", plan.getRecipe())
+                .executeUpdate();
+
+        cancel(eventId)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.changes[0].qtyChange").value(200.0));
+
+        assertThat(reload(potato).getQuantity()).isEqualByComparingTo("500");
     }
 
     @Test
@@ -307,7 +341,7 @@ class CookingApiTest {
         InventoryLot potato = lot("감자", "500", "g", null);
         long eventId = cookOk(plan);
 
-        mockMvc.perform(post("/api/v1/meal-plans/{id}/cancel", plan.getId()))
+        mockMvc.perform(post("/api/v1/meal-plans/{id}/cancel", plan.getId()).with(TestJwt.user(1L)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("MEAL_PLAN_007"));
         cancel(eventId).andExpect(status().isOk());
@@ -321,11 +355,11 @@ class CookingApiTest {
         lot("감자", "500", "g", null);
         long eventId = cookOk(plan);
 
-        mockMvc.perform(get("/api/v1/cooking/preview").param("mealPlanId", plan.getId().toString())
-                        .header("X-User-Id", "2"))
+        mockMvc.perform(get("/api/v1/cooking/preview").with(TestJwt.user(1L)).param("mealPlanId", plan.getId().toString())
+                        .with(TestJwt.user(2L)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("MEAL_PLAN_001"));
-        mockMvc.perform(post("/api/v1/cooking-events/{id}/cancel", eventId).header("X-User-Id", "2"))
+        mockMvc.perform(post("/api/v1/cooking-events/{id}/cancel", eventId).with(TestJwt.user(2L)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("COOKING_001"));
         assertThat(mealPlanRepository.findById(plan.getId()).orElseThrow().getStatus())
@@ -333,11 +367,110 @@ class CookingApiTest {
     }
 
     @Test
-    void 식단_id가_없으면_400() throws Exception {
-        mockMvc.perform(get("/api/v1/cooking/preview"))
+    void 수정한_수량으로_미리보기하고_같은_양을_차감한다() throws Exception {
+        // 레시피 2인분 600g 대신 0.25kg만 쓰고, 양파는 뺀다 (목록에서 빠지거나 0이면 차감 안 함)
+        MealPlan plan = confirmedPlan(2, "닭고기", "300", "g", "양파", "50", "g", "대파", "1", "대");
+        InventoryLot chicken = lot("닭고기", "1", "kg", TODAY.plusDays(2));
+        InventoryLot onion = lot("양파", "200", "g", TODAY.plusDays(2));
+        String ingredients = "[{\"ingredientName\":\"닭고기\",\"quantity\":0.25,\"unit\":\"kg\"},"
+                + "{\"ingredientName\":\"양파\",\"quantity\":0,\"unit\":\"g\"}]";
+
+        preview(plan, ingredients)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.canCook").value(true))
+                .andExpect(jsonPath("$.ingredients.length()").value(1))
+                .andExpect(jsonPath("$.ingredients[0].ingredientName").value("닭고기"))
+                .andExpect(jsonPath("$.ingredients[0].requiredQty").value(250.0))
+                .andExpect(jsonPath("$.ingredients[0].deductions[0].quantity").value(0.25));
+        assertThat(reload(chicken).getQuantity()).isEqualByComparingTo("1");
+
+        String body = cook(plan, ingredients)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.changes.length()").value(1))
+                .andExpect(jsonPath("$.changes[0].qtyChange").value(-0.25))
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(reload(chicken).getQuantity()).isEqualByComparingTo("0.75");
+        assertThat(reload(onion).getQuantity()).isEqualByComparingTo("200");
+
+        // 취소하면 수정한 수량만큼만 복원한다
+        cancel(objectMapper.readTree(body).get("id").asLong()).andExpect(status().isOk());
+        assertThat(reload(chicken).getQuantity()).isEqualByComparingTo("1");
+    }
+
+    @Test
+    void 수정한_수량이_재고보다_많으면_거부한다() throws Exception {
+        MealPlan plan = confirmedPlan(1, "달걀", "1", "개");
+        InventoryLot egg = lot("달걀", "2", "개", null);
+        String ingredients = "[{\"ingredientName\":\"달걀\",\"quantity\":3,\"unit\":\"개\"}]";
+
+        preview(plan, ingredients)
+                .andExpect(jsonPath("$.canCook").value(false))
+                .andExpect(jsonPath("$.blockedReason").value(org.hamcrest.Matchers.containsString("달걀 1개")));
+        cook(plan, ingredients)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("COOKING_004"));
+
+        assertThat(reload(egg).getQuantity()).isEqualByComparingTo("2");
+    }
+
+    @Test
+    void 레시피에_없는_재료나_다른_계열_단위는_거부한다() throws Exception {
+        MealPlan plan = confirmedPlan(1, "감자", "200", "g");
+        InventoryLot potato = lot("감자", "500", "g", null);
+        lot("당근", "500", "g", null);
+
+        cook(plan, "[{\"ingredientName\":\"당근\",\"quantity\":100,\"unit\":\"g\"}]")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COOKING_006"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("당근")));
+        cook(plan, "[{\"ingredientName\":\"감자\",\"quantity\":2,\"unit\":\"개\"}]")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COOKING_006"));
+        preview(plan, "[{\"ingredientName\":\"당근\",\"quantity\":100,\"unit\":\"g\"}]")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COOKING_006"));
+
+        assertThat(reload(potato).getQuantity()).isEqualByComparingTo("500");
+        assertThat(cookingEventRepository.existsByMealPlanIdAndStatus(plan.getId(), CookingStatus.COOKED)).isFalse();
+    }
+
+    @Test
+    void 같은_재료를_두_번_보내거나_모두_빼면_거부한다() throws Exception {
+        MealPlan plan = confirmedPlan(1, "감자", "200", "g");
+        lot("감자", "500", "g", null);
+
+        cook(plan, "[{\"ingredientName\":\"감자\",\"quantity\":100,\"unit\":\"g\"},"
+                + "{\"ingredientName\":\"감자\",\"quantity\":0.1,\"unit\":\"kg\"}]")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COOKING_007"));
+        cook(plan, "[{\"ingredientName\":\"감자\",\"quantity\":0,\"unit\":\"g\"}]")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COOKING_006"));
+        cook(plan, "[]")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COOKING_006"));
+    }
+
+    @Test
+    void 수정한_수량이_음수거나_비어_있으면_400() throws Exception {
+        MealPlan plan = confirmedPlan(1, "감자", "200", "g");
+        lot("감자", "500", "g", null);
+
+        cook(plan, "[{\"ingredientName\":\"감자\",\"quantity\":-1,\"unit\":\"g\"}]")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("COMMON_400"));
-        mockMvc.perform(post("/api/v1/cooking-events").contentType(MediaType.APPLICATION_JSON).content("{}"))
+        cook(plan, "[{\"ingredientName\":\"감자\",\"unit\":\"g\"}]")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON_400"));
+    }
+
+    @Test
+    void 식단_id가_없으면_400() throws Exception {
+        mockMvc.perform(get("/api/v1/cooking/preview").with(TestJwt.user(1L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON_400"));
+        mockMvc.perform(post("/api/v1/cooking-events").with(TestJwt.user(1L)).contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("COMMON_400"));
     }
