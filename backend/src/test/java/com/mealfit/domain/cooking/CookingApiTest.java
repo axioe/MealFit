@@ -286,6 +286,25 @@ class CookingApiTest {
     }
 
     @Test
+    void 레시피_재료량이_바뀌어도_조리_당시_차감량만_복원한다() throws Exception {
+        // QA-13·FR-COOK-03: 조리 후 레시피를 200g → 50g으로 바꿔도 복원은 200g
+        MealPlan plan = confirmedPlan(1, "감자", "200", "g");
+        InventoryLot potato = lot("감자", "500", "g", null);
+        long eventId = cookOk(plan);
+        entityManager.createQuery("update RecipeIngredient ingredient set ingredient.requiredQty = :qty "
+                        + "where ingredient.recipe = :recipe")
+                .setParameter("qty", new BigDecimal("50"))
+                .setParameter("recipe", plan.getRecipe())
+                .executeUpdate();
+
+        cancel(eventId)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.changes[0].qtyChange").value(200.0));
+
+        assertThat(reload(potato).getQuantity()).isEqualByComparingTo("500");
+    }
+
+    @Test
     void 두_번_취소해도_한_번만_복원한다() throws Exception {
         // BR-10·QA-13: 두 번째 취소는 거부, 수량 증가 없음
         MealPlan plan = confirmedPlan(1, "감자", "200", "g");
