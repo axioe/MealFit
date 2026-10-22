@@ -10,6 +10,12 @@ from errors import ServiceError
 from validation import validate_request
 from recommendation import validate_response
 from gemini_client import generate
+import meal_recommendation
+
+
+def generate_meals(request, api_key, model):
+    return generate(request, api_key, model, system_prompt=meal_recommendation.SYSTEM_PROMPT,
+                    response_schema=meal_recommendation.RESPONSE_SCHEMA)
 
 
 def create_app(config=None):
@@ -17,7 +23,7 @@ def create_app(config=None):
     app = Flask(__name__)
     app.json.ensure_ascii = False
     app.config.update(MAX_CONTENT_LENGTH=1024 * 1024, GEMINI_API_KEY=os.getenv('GEMINI_API_KEY', ''),
-                      GEMINI_MODEL=os.getenv('GEMINI_MODEL', 'gemini-3.5-flash-lite'), GENERATOR=generate,
+                      GEMINI_MODEL=os.getenv('GEMINI_MODEL', 'gemini-3.5-flash-lite'), GENERATOR=generate, MEAL_GENERATOR=generate_meals,
                       TODAY=lambda: datetime.now(timezone(timedelta(hours=9))).date())
     app.config.update(config or {})
 
@@ -36,6 +42,18 @@ def create_app(config=None):
         validated = validate_request(body, app.config['TODAY']())
         raw = app.config['GENERATOR'](validated, app.config['GEMINI_API_KEY'], app.config['GEMINI_MODEL'])
         return jsonify(validate_response(raw, validated))
+
+    @app.post('/ai/meal-plans')
+    def recommend_meals():
+        if not request.is_json:
+            raise ServiceError(415, 'AI_001', 'Content-Type을 application/json으로 설정해 주세요.')
+        try:
+            body = json.loads(request.get_data(), parse_float=Decimal, parse_constant=lambda _: None)
+        except (ValueError, UnicodeError):
+            raise ServiceError(400, 'AI_001', '올바른 JSON 요청을 입력해 주세요.') from None
+        validated = meal_recommendation.validate_request(body, app.config['TODAY']())
+        raw = app.config['MEAL_GENERATOR'](validated, app.config['GEMINI_API_KEY'], app.config['GEMINI_MODEL'])
+        return jsonify(meal_recommendation.validate_response(raw, validated))
 
     def error_body(status, code, message, field=None):
         return jsonify(status=status, code=code, message=message,

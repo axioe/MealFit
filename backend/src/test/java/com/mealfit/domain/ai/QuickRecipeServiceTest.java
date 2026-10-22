@@ -99,7 +99,11 @@ class QuickRecipeServiceTest {
     }
     @Test @EnabledIfEnvironmentVariable(named = "MEALFIT_LIVE_AI_URL", matches = ".+")
     void liveFlaskGeminiRecommendationWithoutDatabaseWrites() {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules()
+                .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         RestClient client = RestClient.builder().baseUrl(System.getenv("MEALFIT_LIVE_AI_URL"))
+                .messageConverters(converters -> converters.add(0,
+                        new org.springframework.http.converter.json.MappingJackson2HttpMessageConverter(mapper)))
                 .requestFactory(new org.springframework.http.client.JdkClientHttpRequestFactory(
                         java.net.http.HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(3)).build()) {{ setReadTimeout(java.time.Duration.ofSeconds(20)); }})
                 .build();

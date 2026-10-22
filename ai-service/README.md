@@ -3,7 +3,7 @@
 독립 실행 Flask + Gemini 추천 서비스입니다. React·Spring·MariaDB·Docker를 실행하지 않아도 됩니다.
 이번 작업에 한해 사용자가 FastAPI 대신 Flask를 승인했습니다. 가이드북의 내부 `/ai/*` 경로는 유지합니다.
 기존 Python AI 코드는 없어 새로 구현했으며, 가이드북에는 구체적 프롬프트·모델·15분 추천 스키마가 없습니다.
-따라서 해당 부분은 17차 요구사항으로 작성한 **내부 개발 계약**입니다. 기존 `/ai/meal-plans`, `/ai/recipes`를 구현하거나 대체하지 않습니다.
+따라서 해당 부분은 17차 요구사항으로 작성한 **내부 개발 계약**입니다. 20차에서 기존 Spring DTO에 맞춘 `/ai/meal-plans`를 추가했습니다. `/ai/recipes`는 구현하지 않았습니다.
 
 ## Windows PowerShell 실행
 
@@ -114,3 +114,51 @@ Spring 담당자: Python 주소·경로·선택 재료 식별·알레르기/제�
 16차 실제 사용 재료 편집 모델은 재사용할 수 있지만 추천 결과는 차감 근거가 아닙니다. 별도 Spring 조리 계약이 있어야 합니다.
 
 참고: https://ai.google.dev/gemini-api/docs/models · https://googleapis.github.io/python-genai/
+
+
+## 하루 식단 추천 (20차)
+
+`POST /ai/meal-plans`는 기존 `AiMealPlanRequest`를 받고 `List<AiMealSuggestion>` JSON 배열을 반환합니다.
+React는 기존 `/api/v1/meal-plans/recommend`, `/{id}/regenerate`를 그대로 사용합니다.
+Spring `FlaskMealPlanAiClient`가 기존 `aiRestClient`로 호출하며 인증·재고 조회·검증·저장·상태 전이는 기존 MealPlanService에 유지됩니다.
+Spring의 `test` 프로필에서는 실제 AI 빈을 등록하지 않습니다. 자동 테스트는 명시적 테스트 연결 또는 모의 클라이언트를 사용합니다.
+
+요청 예시 (개인 식별 정보는 전달하지 않음):
+
+```json
+{"planDate":"2026-10-24","mealTypes":["BREAKFAST","LUNCH","DINNER"],"servings":2,
+ "goal":"MAINTAIN","cookTimeMin":20,"mealBudget":null,"allergies":[],"excludedIngredients":[],
+ "inventory":[{"ingredientName":"두부","quantity":300,"unit":"g","expiryDate":null,"expirationStatus":"UNKNOWN"}],
+ "keptMeals":[],"recentMeals":[]}
+```
+
+응답은 요청된 끼니마다 다음 객체를 하나씩 포함하는 배열입니다. 한 끼 재추천은 해당 끼니만 요청·반환합니다.
+
+```json
+[{"mealType":"LUNCH","recipeName":"두부 볶음","description":"보유 재료 활용","servingSize":2,
+  "cookTimeMin":15,"calories":"400","proteinG":"30.1","carbsG":"10","fatG":"20",
+  "ingredients":[{"name":"두부","quantity":"300","unit":"g"}],
+  "steps":["두부를 준비하고 충분히 익힙니다."],"reason":"보유 재료 활용"}]
+```
+
+위 응답은 `mealTypes:["LUNCH"]`에 대한 계약 예시입니다. 수량·영양값은 십진 문자열이며 Spring에서 BigDecimal로 매핑합니다.
+인분은 기존 외부 API와 같은 1~10입니다. 재료량과 영양값은 servingSize 전체 조리량 기준이며 AI 영양 추정치로 저장합니다.
+재료 수량은 기존 서버 검증의 양수·최대 100000 및 DB 소수 3자리, 영양값은 기존 DB DECIMAL(8,1)에 맞춰 검증합니다.
+희망 조리 시간이 있으면 해당 시간을 넘는 결과를 거절합니다. 예산은 실시간 가격 정보가 없어 충족을 보장하지 않습니다.
+기한은 오늘과 예정일 중 늦은 날보다 앞선 재료를 Gemini 입력에서 제외합니다. 기한 미등록은 안전을 보장하지 않습니다.
+알레르기·제외 재료는 기존 서버와 같은 공백 제거·대소문자 무시 포함 비교를 추가 적용합니다. 동의어·복합 성분 검증은 보장하지 않습니다.
+별도 선호 음식·신체 정보 필드는 현재 AiMealPlanRequest에 없어 새로 추가하지 않았습니다.
+
+오류는 기존 AI_001~AI_006 형식이며 Flask에서 가짜 성공·대체 식단을 반환하지 않습니다.
+Spring은 기존 정책대로 검증된 로컬 후보로 전환하고 `LOCAL_FALLBACK`으로 표시합니다. 안전한 후보가 없으면 기존 오류와 롤백을 유지합니다.
+Spring의 공통 `AI_SERVICE_URL=http://localhost:8000`, 연결 3초·읽기 20초, Gemini 18초(추가 재시도 없음), React 30초는 유지합니다.
+Flask 주소 설정을 바꾼 뒤에는 Spring을 재시작해야 합니다. `.env` 로딩 여부는 기존 application.yml의 spring.config.import 설정을 따릅니다.
+
+```powershell
+cd C:\su\MealFit\ai-service
+.\.venv\Scripts\python.exe app.py
+.\.venv\Scripts\python.exe -m unittest -v
+```
+
+`/health`는 키의 유효성까지 검증하지 않습니다. Gemini 실호출은 별도 검증입니다.
+기존 15분 요리 경로·프롬프트·스키마는 유지되며 공통 SDK 함수의 기본 인수도 그대로입니다.
