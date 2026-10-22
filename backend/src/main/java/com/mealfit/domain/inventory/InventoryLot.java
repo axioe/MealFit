@@ -130,7 +130,9 @@ public class InventoryLot extends BaseTimeEntity {
     /** 조리 취소 복원. 차감했던 수량을 되돌리고, 소진된 묶음은 다시 사용 가능(ACTIVE) 상태로 바꾼다. */
     public void restore(BigDecimal quantity) {
         validateQuantity(quantity, true);
-        this.quantity = this.quantity.add(quantity);
+        BigDecimal restoredQuantity = this.quantity.add(quantity);
+        validateQuantity(restoredQuantity, false);
+        this.quantity = restoredQuantity;
         this.status = LotStatus.ACTIVE;
     }
 
