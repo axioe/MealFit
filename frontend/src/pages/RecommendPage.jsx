@@ -1,3 +1,5 @@
+import { DailyMealInfo, DailyRecipePreview } from '@/components/recommend/DailyRecipePreview'
+import { QuickCookingPanel } from '@/components/recommend/QuickCookingPanel'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { RefreshCw, Sparkles, UtensilsCrossed, X } from 'lucide-react'
@@ -15,8 +17,9 @@ import { formatQuantity } from '@/lib/format'
 const ORDER = Object.values(MEAL_TYPE)
 
 function RecipeDetails({ plan }) {
-  return <div data-meal-details className="min-w-0 border-t border-gray-100 pt-3">
-    <Link to={`/recipes/${plan.recipe.id}?servings=${plan.servings}&date=${plan.planDate}`} className="btn-secondary min-h-11 text-xs">재료·조리법 보기</Link>
+  return <div data-meal-details className="flex min-w-0 flex-col border-t border-gray-100 px-4 pt-4">
+    <DailyRecipePreview plan={plan} />
+    <Link to={`/recipes/${plan.recipe.id}?servings=${plan.servings}&date=${plan.planDate}`} className="btn-secondary mt-4 min-h-11 w-full text-xs">재료·조리법 보기</Link>
   </div>
 }
 
@@ -88,14 +91,14 @@ function RecommendDay({ date, setDate }) {
       const plan = plans.find((row) => row.mealType === type)
       if (!plan) return null
       const draft = plan.status === MEAL_PLAN_STATUS.DRAFT
-      return <article key={plan.id} data-meal-card={type} className="card grid min-w-0 gap-4 xl:row-span-5 xl:grid-rows-subgrid">
-        <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">{MEAL_TYPE_LABEL[type]}</h3><MealPlanStatusBadge status={plan.status} /></div>
-        <div className="min-w-0 space-y-3"><h4 className="break-all text-lg font-extrabold text-gray-900">{plan.recipe.name}</h4>
+      return <article key={plan.id} data-meal-card={type} className="grid min-w-0 gap-4 overflow-hidden rounded-2xl border border-gray-200 bg-white pb-4 transition-colors hover:border-emerald-300 xl:row-span-5 xl:grid-rows-subgrid">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-gray-50/70 px-4 py-3"><h3 className="flex items-center gap-2 text-sm font-bold"><span aria-hidden="true">{type === MEAL_TYPE.BREAKFAST ? '🌅' : type === MEAL_TYPE.LUNCH ? '☀️' : '🌙'}</span>{MEAL_TYPE_LABEL[type]}</h3><MealPlanStatusBadge status={plan.status} /></div>
+        <div className="min-w-0 space-y-3 px-4"><h4 className="break-all text-lg font-extrabold text-gray-900">{plan.recipe.name}</h4>
         <div className="flex flex-wrap gap-2">{Object.values(RECIPE_SOURCE).includes(plan.recipe.source) && <RecipeSourceBadge source={plan.recipe.source} />}</div>
-        <p className="text-xs leading-5 text-gray-500">{plan.servings}인분 · 조리 {plan.recipe.cookTimeMin}분 · 레시피 기준 {plan.recipe.calories ?? '미제공'} kcal{plan.recipe.nutritionEstimated ? ' (추정치)' : ''}</p></div>
-        <div data-meal-reason className="min-w-0">{plan.recommendationReason && <p className="h-full whitespace-pre-wrap break-all rounded-xl bg-amber-50 p-3 text-sm leading-6 text-amber-900">{plan.recommendationReason}</p>}</div>
+        <DailyMealInfo plan={plan} /></div>
+        <div data-meal-reason className="min-w-0 px-4">{plan.recommendationReason && <p className="h-full whitespace-pre-wrap break-all rounded-xl bg-amber-50 p-3 text-sm leading-6 text-amber-900">{plan.recommendationReason}</p>}</div>
         <RecipeDetails key={plan.recipe.id} plan={plan} />
-        <div data-meal-actions className="flex flex-wrap content-start items-start gap-2">{draft && <><button type="button" disabled={busy || Boolean(selection)} onClick={() => choose('regenerate', plan)} className="btn-secondary min-h-11"><RefreshCw aria-hidden="true" className="h-4 w-4" />다시 추천</button><button type="button" disabled={busy || Boolean(selection)} onClick={() => choose('confirm', plan)} className="btn-primary min-h-11">이 식단으로 확정</button></>}{plan.status !== MEAL_PLAN_STATUS.CANCELED && <button type="button" disabled={busy || Boolean(selection)} onClick={() => choose('cancel', plan)} className="btn-secondary min-h-11">식단 취소</button>}</div>
+        <div data-meal-actions className="flex flex-wrap content-start items-start gap-2 border-t border-gray-100 px-4 pt-4">{draft && <><button type="button" disabled={busy || Boolean(selection)} onClick={() => choose('regenerate', plan)} className="btn-secondary min-h-11"><RefreshCw aria-hidden="true" className="h-4 w-4" />다시 추천</button><button type="button" disabled={busy || Boolean(selection)} onClick={() => choose('confirm', plan)} className="btn-primary min-h-11">이 식단으로 확정</button></>}{plan.status !== MEAL_PLAN_STATUS.CANCELED && <button type="button" disabled={busy || Boolean(selection)} onClick={() => choose('cancel', plan)} className="btn-secondary min-h-11">식단 취소</button>}</div>
       </article>
     })}</div>}
     <div className="flex flex-wrap gap-3"><Link to="/fridge" className="btn-secondary min-h-11">냉장고 확인</Link><Link to="/shopping" className="btn-secondary min-h-11">장보기 목록 보기</Link></div>
@@ -107,10 +110,22 @@ function RecommendDay({ date, setDate }) {
 export function RecommendPage() {
   const [params, setParams] = useSearchParams()
   const date = params.has('date') ? params.get('date') : today()
-  return <RecommendDay key={date} date={date} setDate={(value) => {
+  const quick = params.get('mode') === 'quick'
+  function setMode(value) {
     const next = new URLSearchParams(params)
-    next.set('date', value)
+    next.set('mode', value)
     setParams(next, { replace: true })
-  }} />
+  }
+  return <div className="space-y-6">
+    <nav aria-label="추천 모드" className="grid grid-cols-2 gap-2 border-b border-gray-200 pb-4">
+      <button type="button" aria-pressed={!quick} onClick={() => setMode('daily')} className={`min-h-12 rounded-xl px-3 py-3 text-sm font-bold ${!quick ? 'bg-emerald-600 text-white ring-2 ring-emerald-600/20' : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'}`}>하루 AI 식단</button>
+      <button type="button" aria-pressed={quick} onClick={() => setMode('quick')} className={`min-h-12 rounded-xl px-3 py-3 text-sm font-bold ${quick ? 'bg-emerald-600 text-white ring-2 ring-emerald-600/20' : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'}`}>냉장고 맞춤 15분 요리</button>
+    </nav>
+    <div hidden={quick}><RecommendDay key={date} date={date} setDate={(value) => {
+      const next = new URLSearchParams(params)
+      next.set('date', value)
+      setParams(next, { replace: true })
+    }} /></div>
+    <div hidden={!quick}><QuickCookingPanel /></div>
+  </div>
 }
-
