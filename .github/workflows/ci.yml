@@ -105,17 +105,18 @@ jobs:
           '
 
       # nginx(화면)와 Spring(API)이 모두 응답할 때까지 최대 3분 기다린다
-      # 없는 API 경로를 부르면 Spring이 살아 있을 때만 ErrorResponse JSON(code 포함)이 온다 (죽어 있으면 nginx 502)
+      # 없는 API 경로를 부르면 Spring이 살아 있을 때는 4xx(로그인 필요 401 등)가 오고,
+      # Spring이 죽어 있거나 시작 중이면 nginx가 502를 준다
       - name: Health check
         run: |
           for i in $(seq 1 36); do
             web=$(curl -s -o /dev/null -w '%{http_code}' "http://$EC2_HOST/" || true)
-            api=$(curl -s "http://$EC2_HOST/api/v1/health-check" || true)
-            if [ "$web" = "200" ] && echo "$api" | grep -q '"code"'; then
-              echo "배포 완료: http://$EC2_HOST"
+            api=$(curl -s -o /dev/null -w '%{http_code}' "http://$EC2_HOST/api/v1/health-check" || true)
+            if [ "$web" = "200" ] && [ "${api:0:1}" = "4" ]; then
+              echo "배포 완료: http://$EC2_HOST (web=$web, api=$api)"
               exit 0
             fi
             sleep 5
           done
-          echo "서버가 응답하지 않습니다 (web=$web)"
+          echo "::error::서버가 응답하지 않습니다 (web=$web, api=$api). 서버에서 docker logs mealfit-backend 로 원인을 확인하세요"
           exit 1

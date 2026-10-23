@@ -42,6 +42,8 @@ services:
       DB_NAME: ${DB_NAME:-mealfit}
       DB_USERNAME: ${DB_USERNAME:-mealfit}
       DB_PASSWORD: ${DB_PASSWORD}
+      # 로그인 토큰 서명 키(Base64, 디코딩 후 32바이트 이상). 없으면 서버가 뜨지 않는다
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET를 .env에 설정하세요 (openssl rand -base64 48)}
       AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai-service:8000}
       TZ: Asia/Seoul
     expose:
