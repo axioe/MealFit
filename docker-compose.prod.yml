@@ -58,15 +58,20 @@ services:
     ports:
       - "80:80"
 
-  # TODO(AI 담당): ai-service/가 추가되면 아래 주석을 풀고 Dockerfile을 맞춘다.
-  # ai-service:
-  #   build: ./ai-service
-  #   container_name: mealfit-ai
-  #   restart: always
-  #   environment:
-  #     GEMINI_API_KEY: ${GEMINI_API_KEY}
-  #   expose:
-  #     - "8000"
+  # Flask + Gemini. backend가 AI_SERVICE_URL(http://ai-service:8000)로만 부르고 외부에는 열지 않는다.
+  # GEMINI_API_KEY가 없어도 배포는 멈추지 않는다 → AI가 503을 주고 backend는 검증된 로컬 대체 식단을 쓴다
+  ai-service:
+    build: ./ai-service
+    container_name: mealfit-ai
+    restart: always
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      HOST: 0.0.0.0
+      PORT: 8000
+      TZ: Asia/Seoul
+    expose:
+      - "8000"
 
 volumes:
   mealfit-db:

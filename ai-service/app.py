@@ -87,4 +87,5 @@ def get_port():
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(host='127.0.0.1', port=get_port(), debug=False)
+    # 로컬은 127.0.0.1, 운영 컨테이너는 HOST=0.0.0.0 (docker-compose.prod.yml)으로 backend가 접근한다
+    app.run(host=os.getenv('HOST', '127.0.0.1'), port=get_port(), debug=False)
